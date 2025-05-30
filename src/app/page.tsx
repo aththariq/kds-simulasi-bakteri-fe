@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SimulationParametersForm from "@/components/simulation/SimulationParametersForm";
+import SimulationController from "@/components/simulation/SimulationController";
 
 export default function Home() {
   return (
@@ -58,9 +59,7 @@ export default function Home() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                  Simulation controls will be implemented here
-                </div>
+                <SimulationController />
               </CardContent>
             </Card>
           </TabsContent>

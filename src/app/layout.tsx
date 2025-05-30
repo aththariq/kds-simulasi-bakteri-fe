@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Bacterial Antibiotic Resistance Simulation",
-  description: "Interactive web simulation modeling bacterial evolution and antibiotic resistance spread using computational biology and data visualization",
+  description:
+    "Interactive web simulation modeling bacterial evolution and antibiotic resistance spread using computational biology and data visualization",
 };
 
 export default function RootLayout({
@@ -28,6 +30,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <Toaster />
       </body>
     </html>
   );
