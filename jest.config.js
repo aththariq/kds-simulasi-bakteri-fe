@@ -14,7 +14,35 @@ const customJestConfig = {
     "src/**/*.{js,jsx,ts,tsx}",
     "!src/**/*.d.ts",
     "!src/**/index.ts",
+    "!src/**/*.stories.{js,jsx,ts,tsx}",
+    "!src/**/*.test.{js,jsx,ts,tsx}",
   ],
+  moduleNameMapper: {
+    // Handle CSS imports (with CSS modules)
+    "^.+\\.module\\.(css|sass|scss)$": "identity-obj-proxy",
+
+    // Handle CSS imports (without CSS modules)
+    "^.+\\.(css|sass|scss)$": "identity-obj-proxy",
+
+    // Handle image imports
+    "^.+\\.(png|jpg|jpeg|gif|webp|avif|ico|bmp|svg)$/i": `<rootDir>/__mocks__/fileMock.js`,
+
+    // Handle module aliases
+    "^@/(.*)$": "<rootDir>/src/$1",
+  },
+  testEnvironmentOptions: {
+    customExportConditions: [""],
+  },
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70,
+    },
+  },
+  coverageDirectory: "coverage",
+  collectCoverage: false,
 };
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -25,6 +25,25 @@ import {
   parameterValidators,
 } from "@/lib/validation";
 import { formatNumber, formatPercentage } from "@/lib/utils";
+import {
+  useNotifications,
+  ValidationAlert,
+  FieldError,
+} from "@/components/ui/notification-system";
+import {
+  ValidationErrorHandler,
+  SimulationErrorHandler,
+  errorUtils,
+} from "@/lib/error-handling";
+import {
+  FormStateManager,
+  autoSaveManager,
+  GracefulDegradationManager,
+  RecoveryFlowManager,
+  recoveryUtils,
+} from "@/lib/recovery-mechanisms";
+import { simulationParametersSchema } from "@/lib/schemas/api";
+import { useNotifications as useNotificationsHook } from "@/hooks/useNotifications";
 
 const defaultParameters: SimulationParameters = {
   populationSize: 10000,
@@ -90,15 +109,114 @@ const recommendations = {
 };
 
 export default function SimulationParametersForm() {
+  const { addNotification } = useNotificationsHook();
   const [parameters, setParameters] =
     useState<SimulationParameters>(defaultParameters);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [validationErrors, setValidationErrors] = useState<any[]>([]);
   const [isValidating, setIsValidating] = useState(false);
   const [announceMessage, setAnnounceMessage] = useState<string>("");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+
+  // Get notification system hooks
+  const { validateAndNotify, showNotification } = useNotifications();
 
   // Refs for focus management
   const firstErrorRef = useRef<HTMLDivElement>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Form ID for recovery mechanisms
+  const FORM_ID = "simulation-parameters-form";
+
+  // Initialize recovery mechanisms
+  useEffect(() => {
+    // Check for previous session data
+    if (FormStateManager.hasFormState(FORM_ID)) {
+      FormStateManager.restoreFormState(FORM_ID, {
+        showNotification: true,
+        onRestore: data => {
+          setParameters(data);
+          setHasUnsavedChanges(false);
+          announceToScreenReader("Previous form data has been restored.");
+        },
+        onError: error => {
+          console.error("Failed to restore form state:", error);
+        },
+      });
+    }
+
+    // Start auto-save
+    autoSaveManager.startAutoSave(
+      {
+        key: FORM_ID,
+        interval: 30000, // Save every 30 seconds
+        maxVersions: 5,
+        enabled: autoSaveEnabled,
+      },
+      () => parameters,
+      () => {
+        console.log("Form auto-saved");
+      }
+    );
+
+    // Register form features for graceful degradation
+    GracefulDegradationManager.registerFeature("validation", true);
+    GracefulDegradationManager.registerFeature(
+      "autosave",
+      recoveryUtils.checkBrowserSupport()
+    );
+
+    // Check for recovery data on component mount
+    if (FormStateManager.hasRecoveryData(FORM_ID)) {
+      RecoveryFlowManager.offerDataRecovery(
+        FORM_ID,
+        recoveredData => {
+          setParameters(recoveredData);
+          addNotification({
+            type: "success",
+            title: "Data Restored",
+            message: "Your previous simulation parameters have been restored.",
+            duration: 5000,
+          });
+        },
+        () => {
+          addNotification({
+            type: "info",
+            title: "Starting Fresh",
+            message: "Starting with default parameters.",
+            duration: 3000,
+          });
+        }
+      );
+    }
+
+    // Cleanup on unmount
+    return () => {
+      autoSaveManager.stopAutoSave(FORM_ID);
+    };
+  }, []);
+
+  // Track unsaved changes
+  useEffect(() => {
+    const hasChanges =
+      JSON.stringify(parameters) !== JSON.stringify(defaultParameters);
+    setHasUnsavedChanges(hasChanges);
+
+    // Update DOM attribute for beforeunload handler
+    if (formRef.current) {
+      formRef.current.setAttribute(
+        "data-has-unsaved-changes",
+        hasChanges.toString()
+      );
+    }
+
+    // Save form state when parameters change
+    if (hasChanges) {
+      FormStateManager.saveFormState(FORM_ID, parameters);
+    }
+  }, [parameters]);
 
   // Screen reader announcement
   const announceToScreenReader = useCallback((message: string) => {
@@ -111,52 +229,150 @@ export default function SimulationParametersForm() {
     e.preventDefault();
     setIsValidating(true);
 
-    const validation = validateSimulationParameters(parameters);
+    try {
+      // Use graceful degradation for validation
+      const validationResult = GracefulDegradationManager.executeWithFallback(
+        "validation",
+        () => {
+          // Primary validation using centralized system
+          return validateAndNotify(
+            parameters,
+            simulationParametersSchema,
+            validatedData => {
+              // Success callback
+              console.log("✅ Valid simulation parameters:", validatedData);
+              setErrors({});
+              setValidationErrors([]);
+              setHasUnsavedChanges(false);
 
-    if (validation.success) {
-      console.log("✅ Valid simulation parameters:", validation.data);
-      setErrors({});
-      announceToScreenReader(
-        "Simulation parameters validated successfully. Ready to start simulation."
-      );
-      // This will be connected to the backend simulation API
-    } else {
-      console.log("❌ Validation errors:", validation.errors);
-      const errorMap: Record<string, string> = {};
+              // Clear saved form state on successful submission
+              FormStateManager.clearFormState(FORM_ID);
 
-      if (validation.errors) {
-        Object.entries(validation.errors).forEach(([key, value]) => {
-          if (key !== "_errors" && value && "_errors" in value) {
-            errorMap[key] = Array.isArray(value._errors)
-              ? value._errors[0]
-              : String(value._errors);
+              showNotification("success", {
+                title: "Parameters Validated",
+                description:
+                  "Simulation parameters are valid and ready to use.",
+                duration: 4000,
+              });
+
+              announceToScreenReader(
+                "Simulation parameters validated successfully. Ready to start simulation."
+              );
+
+              // This will be connected to the backend simulation API
+              // simulationAPI.startSimulation(validatedData);
+            },
+            validationErrors => {
+              // Error callback with recovery flow
+              const errorMap: Record<string, string> = {};
+
+              validationErrors.forEach(error => {
+                errorMap[error.field] = error.message;
+              });
+
+              setErrors(errorMap);
+              setValidationErrors(validationErrors);
+
+              // Show recovery flow for validation errors
+              RecoveryFlowManager.showValidationRecoveryFlow(
+                validationErrors,
+                () => {
+                  // Focus first error field
+                  setTimeout(() => {
+                    if (firstErrorRef.current) {
+                      firstErrorRef.current.focus();
+                    }
+                  }, 100);
+                }
+              );
+
+              const errorCount = validationErrors.length;
+              announceToScreenReader(
+                `Validation failed. ${errorCount} error${
+                  errorCount !== 1 ? "s" : ""
+                } found. Please review and correct the highlighted fields.`
+              );
+            }
+          );
+        },
+        () => {
+          // Fallback validation using basic validation
+          const validation = validateSimulationParameters(parameters);
+
+          if (validation.success) {
+            setErrors({});
+            setValidationErrors([]);
+            showNotification("success", {
+              title: "Parameters Validated (Fallback)",
+              description:
+                "Basic validation passed. Some advanced features may be unavailable.",
+              duration: 4000,
+            });
+            return true;
+          } else {
+            RecoveryFlowManager.showFeatureUnavailableFlow(
+              "Advanced Validation",
+              ["Basic validation", "Manual review"]
+            );
+            return false;
           }
-        });
-      }
-
-      setErrors(errorMap);
-
-      const errorCount = Object.keys(errorMap).length;
-      announceToScreenReader(
-        `Validation failed. ${errorCount} error${
-          errorCount !== 1 ? "s" : ""
-        } found. Please review and correct the highlighted fields.`
-      );
-
-      // Focus first error after a brief delay
-      setTimeout(() => {
-        if (firstErrorRef.current) {
-          firstErrorRef.current.focus();
         }
-      }, 100);
-    }
+      );
+    } catch (error) {
+      SimulationErrorHandler.handleSimulationError(
+        error,
+        "parameter validation"
+      );
+      announceToScreenReader("An unexpected error occurred during validation.");
 
-    setIsValidating(false);
+      // Show error recovery flow
+      if (error instanceof Error) {
+        RecoveryFlowManager.showErrorRecoveryFlow(error as any, [
+          {
+            label: "Retry Validation",
+            action: () => handleSubmit(e),
+          },
+          {
+            label: "Reset Form",
+            action: handleReset,
+          },
+        ]);
+      }
+    } finally {
+      setIsValidating(false);
+    }
   };
 
   const handleReset = () => {
+    // Check for unsaved changes before reset
+    if (hasUnsavedChanges) {
+      RecoveryFlowManager.showDataLossPreventionFlow(FORM_ID, data => {
+        // Save current state before reset
+        recoveryUtils.createCheckpoint("before_reset", parameters);
+
+        // Proceed with reset
+        performReset();
+      });
+    } else {
+      performReset();
+    }
+  };
+
+  const performReset = () => {
     setParameters(defaultParameters);
     setErrors({});
+    setValidationErrors([]);
+    setHasUnsavedChanges(false);
+
+    // Clear saved form state
+    FormStateManager.clearFormState(FORM_ID);
+
+    showNotification("info", {
+      title: "Form Reset",
+      description: "All parameters have been reset to default values.",
+      duration: 3000,
+    });
+
     announceToScreenReader("Form reset to default values.");
   };
 
@@ -171,15 +387,27 @@ export default function SimulationParametersForm() {
       const validator =
         parameterValidators[key as keyof typeof parameterValidators];
       const error = validator(value);
+
       setErrors(prev => {
         const newErrors = {
           ...prev,
           [key]: error || "",
         };
 
+        // Clear validation errors for this field if no error
+        if (!error && validationErrors.length > 0) {
+          setValidationErrors(prev => prev.filter(err => err.field !== key));
+        }
+
         // Announce validation status for screen readers
         if (error) {
           announceToScreenReader(`${key}: ${error}`);
+
+          // Show field-specific validation error
+          ValidationErrorHandler.showFieldValidationError(
+            key.replace(/([A-Z])/g, " $1").toLowerCase(),
+            error
+          );
         } else if (prev[key]) {
           announceToScreenReader(`${key}: Value corrected.`);
         }
@@ -312,7 +540,18 @@ export default function SimulationParametersForm() {
         role="form"
         aria-label="Simulation Parameters Configuration"
         noValidate
+        ref={formRef}
       >
+        {/* Global validation errors */}
+        {validationErrors.length > 0 && (
+          <ValidationAlert
+            errors={validationErrors}
+            className="mb-6"
+            dismissible={true}
+            onDismiss={() => setValidationErrors([])}
+          />
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Basic Population Parameters */}
           <Card>
