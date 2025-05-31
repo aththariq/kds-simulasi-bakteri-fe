@@ -7,7 +7,7 @@ import { Button } from "./button";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 
 interface ErrorInfo {
-  componentStack: string;
+  componentStack?: string;
   errorBoundary?: string;
   errorBoundaryStack?: string;
 }
@@ -244,9 +244,9 @@ export class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     const errorInfoFormatted: ErrorInfo = {
-      componentStack: errorInfo.componentStack,
-      errorBoundary: errorInfo.errorBoundary,
-      errorBoundaryStack: errorInfo.errorBoundaryStack,
+      componentStack: errorInfo.componentStack || undefined,
+      // Note: errorBoundary and errorBoundaryStack may not be available in all React versions
+      // These are custom properties we can add if needed
     };
 
     this.setState({

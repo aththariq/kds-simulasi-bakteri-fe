@@ -1,13 +1,11 @@
 import { toast } from "sonner";
-import { z } from "zod";
-import { notifications } from "@/components/ui/notification-system";
-import { AppError, ErrorCategory, ErrorSeverity } from "./error-handling";
+import type { ValidationError } from "@/components/ui/notification-system";
 
 // Types for recovery mechanisms
 export interface RecoveryState {
   id: string;
   timestamp: number;
-  data: any;
+  data: unknown;
   version: string;
   checksum?: string;
 }
@@ -32,7 +30,7 @@ export class FormStateManager {
   private static readonly STORAGE_PREFIX = "form_recovery_";
   private static readonly EXPIRY_HOURS = 24;
 
-  static saveFormState(formId: string, data: any): void {
+  static saveFormState(formId: string, data: unknown): void {
     try {
       const recoveryState: RecoveryState = {
         id: formId,
@@ -57,7 +55,14 @@ export class FormStateManager {
     }
   }
 
-  static restoreFormState(formId: string): any | null {
+  static restoreFormState(
+    formId: string,
+    options: {
+      showNotification?: boolean;
+      onRestore?: (data: unknown) => void;
+      onError?: (error: unknown) => void;
+    } = {}
+  ): unknown | null {
     try {
       const stored = localStorage.getItem(`${this.STORAGE_PREFIX}${formId}`);
       if (!stored) return null;
@@ -79,11 +84,23 @@ export class FormStateManager {
         }
       }
 
+      if (options.onRestore) {
+        options.onRestore(storageData.data);
+      }
+
       return storageData.data;
     } catch (error) {
       console.warn("Failed to restore form state:", error);
+      if (options.onError) {
+        options.onError(error);
+      }
       return null;
     }
+  }
+
+  static hasFormState(formId: string): boolean {
+    const data = this.restoreFormState(formId);
+    return data !== null;
   }
 
   static clearFormState(formId: string): void {
@@ -94,28 +111,21 @@ export class FormStateManager {
     }
   }
 
-  static hasRecoveryData(formId: string): boolean {
-    const data = this.restoreFormState(formId);
-    return data !== null;
-  }
-
   static clearExpiredStates(): void {
     try {
       const keys = Object.keys(localStorage);
-      const now = Date.now();
-
       keys.forEach(key => {
         if (key.startsWith(this.STORAGE_PREFIX)) {
           try {
             const stored = localStorage.getItem(key);
             if (stored) {
-              const data = JSON.parse(stored);
-              if (data.expiryTime && now > data.expiryTime) {
+              const storageData = JSON.parse(stored);
+              if (Date.now() > storageData.expiryTime) {
                 localStorage.removeItem(key);
               }
             }
-          } catch (error) {
-            // Remove corrupted entries
+          } catch (_error) {
+            // If we can't parse or access the data, remove it
             localStorage.removeItem(key);
           }
         }
@@ -125,7 +135,39 @@ export class FormStateManager {
     }
   }
 
-  private static generateChecksum(data: any): string {
+  static hasRecoveryData(formId: string): boolean {
+    const data = this.restoreFormState(formId);
+    return data !== null;
+  }
+
+  static getRecoveryState(formId: string): RecoveryState | null {
+    try {
+      const stored = localStorage.getItem(`${this.STORAGE_PREFIX}${formId}`);
+      if (!stored) return null;
+
+      const storageData = JSON.parse(stored);
+
+      // Check if data has expired
+      if (Date.now() > storageData.expiryTime) {
+        this.clearFormState(formId);
+        return null;
+      }
+
+      // Return the full recovery state
+      return {
+        id: storageData.id,
+        timestamp: storageData.timestamp,
+        data: storageData.data,
+        version: storageData.version,
+        checksum: storageData.checksum,
+      };
+    } catch (error) {
+      console.warn("Failed to get recovery state:", error);
+      return null;
+    }
+  }
+
+  private static generateChecksum(data: unknown): string {
     // Simple checksum generation for data integrity
     const str = JSON.stringify(data);
     let hash = 0;
@@ -144,27 +186,46 @@ export class AutoSaveManager {
   private static readonly DEFAULT_INTERVAL = 30000; // 30 seconds
 
   startAutoSave(
-    formId: string,
-    getData: () => any,
-    options: RecoveryOptions = {}
+    options: {
+      key: string;
+      interval?: number;
+      maxVersions?: number;
+      enabled?: boolean;
+    },
+    getData: () => unknown,
+    onSave?: () => void
   ): void {
-    const interval = options.saveInterval || AutoSaveManager.DEFAULT_INTERVAL;
+    const {
+      key,
+      interval = AutoSaveManager.DEFAULT_INTERVAL,
+      enabled = true,
+    } = options;
+
+    if (!enabled) return;
 
     // Clear existing interval if any
-    this.stopAutoSave(formId);
+    this.stopAutoSave(key);
 
     const intervalId = setInterval(() => {
       try {
         const data = getData();
-        if (data && Object.keys(data).length > 0) {
-          FormStateManager.saveFormState(formId, data);
+        if (
+          data &&
+          typeof data === "object" &&
+          data !== null &&
+          Object.keys(data).length > 0
+        ) {
+          FormStateManager.saveFormState(key, data);
+          if (onSave) {
+            onSave();
+          }
         }
-      } catch (error) {
-        console.warn(`Auto-save failed for form ${formId}:`, error);
+      } catch (_error) {
+        console.warn(`Auto-save failed for form ${key}:`, _error);
       }
     }, interval);
 
-    this.intervals.set(formId, intervalId);
+    this.intervals.set(key, intervalId);
   }
 
   stopAutoSave(formId: string): void {
@@ -173,17 +234,6 @@ export class AutoSaveManager {
       clearInterval(intervalId);
       this.intervals.delete(formId);
     }
-  }
-
-  stopAllAutoSave(): void {
-    this.intervals.forEach((intervalId, formId) => {
-      clearInterval(intervalId);
-    });
-    this.intervals.clear();
-  }
-
-  isAutoSaveActive(formId: string): boolean {
-    return this.intervals.has(formId);
   }
 }
 
@@ -252,16 +302,16 @@ export class GracefulDegradationManager {
 export class RecoveryFlowManager {
   static async offerDataRecovery(
     formId: string,
-    onRestore: (data: any) => void,
+    onRestore: (data: unknown) => void,
     onDiscard: () => void
   ): Promise<void> {
-    const recoveryData = FormStateManager.restoreFormState(formId);
+    const recoveryState = FormStateManager.getRecoveryState(formId);
 
-    if (!recoveryData) {
+    if (!recoveryState) {
       return;
     }
 
-    const timestamp = new Date(recoveryData.timestamp || Date.now());
+    const timestamp = new Date(recoveryState.timestamp);
     const timeAgo = this.getTimeAgo(timestamp);
 
     toast.info(
@@ -271,7 +321,7 @@ export class RecoveryFlowManager {
         action: {
           label: "Restore",
           onClick: () => {
-            onRestore(recoveryData);
+            onRestore(recoveryState.data);
             FormStateManager.clearFormState(formId);
             toast.success("Data restored successfully");
           },
@@ -328,7 +378,7 @@ export class RecoveryFlowManager {
       try {
         await retryFn();
         toast.success(`${operation} completed successfully`);
-      } catch (error) {
+      } catch (_error) {
         if (retryCount < maxRetries) {
           toast.error(
             `${operation} failed. Retry ${retryCount}/${maxRetries}`,
@@ -360,6 +410,27 @@ export class RecoveryFlowManager {
     });
   }
 
+  static showValidationRecoveryFlow(
+    validationErrors: ValidationError[],
+    onFocus?: () => void
+  ): void {
+    const errorCount = validationErrors.length;
+    const primaryError = validationErrors[0];
+
+    toast.warning(
+      `${errorCount} validation error${errorCount > 1 ? "s" : ""} found`,
+      {
+        description: primaryError?.message,
+        action: {
+          label: "Focus First Error",
+          onClick: () => {
+            onFocus?.();
+          },
+        },
+      }
+    );
+  }
+
   private static getTimeAgo(date: Date): string {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -380,7 +451,7 @@ export class RecoveryFlowManager {
 export class SessionRecoveryManager {
   private static readonly SESSION_KEY = "app_session_recovery";
 
-  static saveSessionState(state: any): void {
+  static saveSessionState(state: unknown): void {
     try {
       const sessionData = {
         state,
@@ -389,12 +460,12 @@ export class SessionRecoveryManager {
       };
 
       sessionStorage.setItem(this.SESSION_KEY, JSON.stringify(sessionData));
-    } catch (error) {
-      console.warn("Failed to save session state:", error);
+    } catch {
+      console.warn("Failed to save session state");
     }
   }
 
-  static restoreSessionState(): any | null {
+  static restoreSessionState(): unknown | null {
     try {
       const stored = sessionStorage.getItem(this.SESSION_KEY);
       if (!stored) return null;
@@ -405,8 +476,8 @@ export class SessionRecoveryManager {
       sessionStorage.removeItem(this.SESSION_KEY);
 
       return sessionData;
-    } catch (error) {
-      console.warn("Failed to restore session state:", error);
+    } catch {
+      console.warn("Failed to restore session state");
       return null;
     }
   }
@@ -475,7 +546,7 @@ export const RecoveryUtils = {
     try {
       const getStorageSize = (storage: Storage) => {
         let total = 0;
-        for (let key in storage) {
+        for (const key in storage) {
           if (storage.hasOwnProperty(key)) {
             total += storage[key].length + key.length;
           }
@@ -559,12 +630,3 @@ export function initializeRecoveryMechanisms(): void {
 
 // Export singleton instances
 export const autoSaveManager = new AutoSaveManager();
-
-// Export all recovery mechanisms
-export {
-  FormStateManager,
-  AutoSaveManager,
-  GracefulDegradationManager,
-  RecoveryFlowManager,
-  SessionRecoveryManager,
-};

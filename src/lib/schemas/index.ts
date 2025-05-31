@@ -1,3 +1,6 @@
+import { z } from "zod";
+export { z };
+
 // Re-export all WebSocket schemas
 export * from "./websocket";
 
@@ -11,7 +14,6 @@ export * from "./user";
 export * from "../validation";
 
 // Common validation utilities
-import { z } from "zod";
 
 // Generic validation result type
 export type ValidationResult<T> =
@@ -23,7 +25,7 @@ export type ValidationResult<T> =
   | {
       success: false;
       data: null;
-      errors: Record<string, any>;
+      errors: Record<string, unknown>;
     };
 
 // Common validation patterns
@@ -274,16 +276,20 @@ export const ValidationUtils = {
 
         // Apply custom error messages if provided
         if (customErrors) {
-          const applyCustomErrors = (errors: any): any => {
+          const applyCustomErrors = (
+            errors: Record<string, unknown>
+          ): Record<string, unknown> => {
             if (typeof errors === "object" && errors !== null) {
               const result = { ...errors };
               Object.keys(result).forEach(key => {
                 if (key === "_errors" && Array.isArray(result[key])) {
-                  result[key] = result[key].map(
+                  result[key] = (result[key] as string[]).map(
                     (err: string) => customErrors[err] || err
                   );
                 } else if (typeof result[key] === "object") {
-                  result[key] = applyCustomErrors(result[key]);
+                  result[key] = applyCustomErrors(
+                    result[key] as Record<string, unknown>
+                  );
                 }
               });
               return result;
@@ -312,53 +318,89 @@ export const ValidationUtils = {
     }
   },
 
-  // Extract error messages from validation result
-  extractErrors: (validationResult: ValidationResult<any>): string[] => {
+  // Format Zod errors for user-friendly display
+  formatErrors: (error: z.ZodError): Record<string, string[]> => {
+    const formatted: Record<string, string[]> = {};
+
+    error.errors.forEach(err => {
+      const path = err.path.join(".");
+      if (!formatted[path]) {
+        formatted[path] = [];
+      }
+      formatted[path].push(err.message);
+    });
+
+    return formatted;
+  },
+
+  // Apply custom error messages
+  applyCustomErrors: (
+    errors: Record<string, unknown>
+  ): Record<string, unknown> => {
+    const customErrors: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(errors)) {
+      if (Array.isArray(value)) {
+        customErrors[key] = value.map(msg =>
+          typeof msg === "string" ? msg : String(msg)
+        );
+      } else {
+        customErrors[key] = value;
+      }
+    }
+
+    return customErrors;
+  },
+
+  // Extract all error messages as flat array
+  extractErrors: (validationResult: ValidationResult<unknown>): string[] => {
     if (validationResult.success) return [];
 
-    const extractFromObject = (obj: any): string[] => {
-      const errors: string[] = [];
+    const extractFromObject = (obj: Record<string, unknown>): string[] => {
+      const messages: string[] = [];
 
-      if (typeof obj === "object" && obj !== null) {
-        Object.values(obj).forEach(value => {
-          if (Array.isArray(value)) {
-            errors.push(
-              ...value.filter((v): v is string => typeof v === "string")
-            );
-          } else if (typeof value === "object") {
-            errors.push(...extractFromObject(value));
-          }
-        });
+      for (const value of Object.values(obj)) {
+        if (Array.isArray(value)) {
+          messages.push(
+            ...value.filter((msg): msg is string => typeof msg === "string")
+          );
+        } else if (typeof value === "string") {
+          messages.push(value);
+        } else if (value && typeof value === "object") {
+          messages.push(...extractFromObject(value as Record<string, unknown>));
+        }
       }
 
-      return errors;
+      return messages;
     };
 
     return extractFromObject(validationResult.errors);
   },
 
-  // Get field-specific errors
-  getFieldErrors: (
-    validationResult: ValidationResult<any>
+  // Extract field-specific errors
+  extractFieldErrors: (
+    validationResult: ValidationResult<unknown>
   ): Record<string, string[]> => {
     if (validationResult.success) return {};
 
     const fieldErrors: Record<string, string[]> = {};
 
-    const extractFieldErrors = (obj: any, prefix = ""): void => {
-      if (typeof obj === "object" && obj !== null) {
-        Object.entries(obj).forEach(([key, value]) => {
-          const fieldPath = prefix ? `${prefix}.${key}` : key;
+    const extractFieldErrors = (
+      obj: Record<string, unknown>,
+      prefix = ""
+    ): void => {
+      for (const [key, value] of Object.entries(obj)) {
+        const fieldName = prefix ? `${prefix}.${key}` : key;
 
-          if (key === "_errors" && Array.isArray(value)) {
-            const parentField = prefix || "root";
-            fieldErrors[parentField] = value.filter(
-              (v): v is string => typeof v === "string"
-            );
-          } else if (typeof value === "object") {
-            extractFieldErrors(value, fieldPath);
-          }
-        });
+        if (Array.isArray(value)) {
+          fieldErrors[fieldName] = value.filter(
+            (msg): msg is string => typeof msg === "string"
+          );
+        } else if (typeof value === "string") {
+          fieldErrors[fieldName] = [value];
+        } else if (value && typeof value === "object") {
+          extractFieldErrors(value as Record<string, unknown>, fieldName);
+        }
       }
     };
 
@@ -366,21 +408,27 @@ export const ValidationUtils = {
     return fieldErrors;
   },
 
-  // Check if validation has specific error type
-  hasError: (
-    validationResult: ValidationResult<any>,
-    errorMessage: string
-  ): boolean => {
-    const errors = ValidationUtils.extractErrors(validationResult);
-    return errors.some(error => error.includes(errorMessage));
+  // Combine multiple validation results
+  combineResults: <T>(
+    validationResult: ValidationResult<unknown>,
+    transform?: (data: unknown) => T
+  ): ValidationResult<T> => {
+    if (!validationResult.success) {
+      return validationResult as ValidationResult<T>;
+    }
+
+    const data = transform
+      ? transform(validationResult.data)
+      : (validationResult.data as T);
+    return { success: true, data, errors: null };
   },
 
-  // Combine multiple validation results
-  combineValidations: (
-    ...results: ValidationResult<any>[]
-  ): ValidationResult<any[]> => {
-    const data: any[] = [];
-    const errors: Record<string, any> = {};
+  // Merge multiple validation results
+  mergeResults: (
+    ...results: ValidationResult<unknown>[]
+  ): ValidationResult<unknown[]> => {
+    const data: unknown[] = [];
+    const errors: Record<string, unknown> = {};
     let hasErrors = false;
 
     results.forEach((result, index) => {
@@ -388,34 +436,37 @@ export const ValidationUtils = {
         data.push(result.data);
       } else {
         hasErrors = true;
-        errors[`field_${index}`] = result.errors;
+        Object.assign(errors, {
+          [`field_${index}`]: result.errors,
+        });
       }
     });
 
     if (hasErrors) {
-      return {
-        success: false as const,
-        data: null,
-        errors,
-      };
+      return { success: false, data: null, errors };
     }
 
-    return {
-      success: true as const,
-      data,
-      errors: null,
-    };
+    return { success: true, data, errors: null };
+  },
+
+  // Type guard for validation results
+  isValidationResult: (obj: unknown): obj is ValidationResult<unknown> => {
+    return (
+      typeof obj === "object" &&
+      obj !== null &&
+      typeof (obj as ValidationResult<unknown>).success === "boolean"
+    );
   },
 };
 
 // Type guards for common validation
 export const TypeGuards = {
-  isValidationResult: (obj: unknown): obj is ValidationResult<any> => {
+  isValidationResult: (obj: unknown): obj is ValidationResult<unknown> => {
     return (
       typeof obj === "object" &&
       obj !== null &&
       "success" in obj &&
-      typeof (obj as any).success === "boolean"
+      typeof (obj as ValidationResult<unknown>).success === "boolean"
     );
   },
 
@@ -432,10 +483,13 @@ export const TypeGuards = {
   },
 };
 
-// Default export with all utilities
-export default {
+// Named export instead of anonymous default
+export const SchemaUtils = {
   CommonSchemas,
   ErrorMessages,
   ValidationUtils,
   TypeGuards,
 };
+
+// Default export
+export default SchemaUtils;

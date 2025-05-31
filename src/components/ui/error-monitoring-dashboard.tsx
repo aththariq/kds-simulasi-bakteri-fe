@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -55,7 +54,7 @@ export function ErrorMonitoringDashboard({
   const [filterSeverity, setFilterSeverity] = useState<ErrorSeverity | "all">(
     "all"
   );
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
 
   // Load data from monitoring system
   const loadData = () => {
@@ -491,7 +490,7 @@ export function ErrorMonitoringDashboard({
                           {breadcrumb.category === "error" && (
                             <AlertCircle className="h-4 w-4 text-destructive" />
                           )}
-                          {breadcrumb.category === "warning" && (
+                          {breadcrumb.level === "warning" && (
                             <AlertTriangle className="h-4 w-4 text-yellow-500" />
                           )}
                           {breadcrumb.category === "info" && (

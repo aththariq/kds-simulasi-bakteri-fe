@@ -1,5 +1,5 @@
+import { ReactElement } from "react";
 import { render, RenderOptions } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 
 // Mock data generators for testing
 export const mockSimulationData = {
@@ -66,9 +66,17 @@ export const createMockWebSocket = () => {
 export const waitForNextTick = () =>
   new Promise(resolve => setTimeout(resolve, 0));
 
-// Custom user event setup
-export const createUser = () => userEvent.setup();
+// Custom render function if needed in the future
+interface CustomRenderOptions extends Omit<RenderOptions, "wrapper"> {
+  // Custom providers can be added here in the future
+  customProviders?: boolean;
+}
 
-// Re-export everything
-export * from "@testing-library/react";
-export { userEvent };
+const customRender = (ui: ReactElement, options?: CustomRenderOptions) => {
+  return render(ui, {
+    // Add custom providers/wrappers here if needed
+    ...options,
+  });
+};
+
+export { customRender as render };

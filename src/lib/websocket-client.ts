@@ -5,11 +5,7 @@ import {
   ErrorCategory,
   ErrorSeverity,
 } from "./error-handling";
-import {
-  clientMessageSchema,
-  serverMessageSchema,
-  protocolVersionSchema,
-} from "./schemas/websocket";
+import { WebSocketProtocolMessageSchema } from "./schemas/websocket";
 import { notifications } from "@/components/ui/notification-system";
 
 // WebSocket connection states
@@ -22,7 +18,7 @@ export enum ConnectionState {
 }
 
 // WebSocket client configuration
-interface WebSocketClientConfig {
+export interface WebSocketClientConfig {
   url: string;
   protocols?: string[];
   reconnectAttempts: number;
@@ -45,13 +41,13 @@ const DEFAULT_WS_CONFIG: WebSocketClientConfig = {
 // Message types for type safety
 export interface OutgoingMessage {
   type: string;
-  payload?: any;
+  payload?: Record<string, unknown>;
   id?: string;
 }
 
 export interface IncomingMessage {
   type: string;
-  payload?: any;
+  payload?: Record<string, unknown>;
   id?: string;
   timestamp?: string;
 }
@@ -61,7 +57,7 @@ export interface WebSocketEventHandlers {
   onConnect?: () => void;
   onDisconnect?: (reason?: string) => void;
   onMessage?: (message: IncomingMessage) => void;
-  onError?: (error: any) => void;
+  onError?: (error: Error) => void;
   onReconnect?: (attempt: number) => void;
   onReconnectFailed?: () => void;
   onStateChange?: (state: ConnectionState) => void;
@@ -77,8 +73,8 @@ export class WebSocketClient {
   private pendingMessages: Map<
     string,
     {
-      resolve: (value: any) => void;
-      reject: (error: any) => void;
+      resolve: (value: unknown) => void;
+      reject: (error: unknown) => void;
       timeout: NodeJS.Timeout;
     }
   > = new Map();
@@ -169,7 +165,7 @@ export class WebSocketClient {
   async sendMessage(
     message: OutgoingMessage,
     waitForResponse = false
-  ): Promise<any> {
+  ): Promise<unknown> {
     if (!this.isConnected()) {
       if (this.state === ConnectionState.DISCONNECTED) {
         await this.connect();
@@ -187,7 +183,7 @@ export class WebSocketClient {
     // Validate message if enabled
     if (this.config.validateMessages) {
       try {
-        clientMessageSchema.parse(message);
+        WebSocketProtocolMessageSchema.parse(message);
       } catch (error) {
         if (error instanceof z.ZodError) {
           throw new AppError(
@@ -224,7 +220,7 @@ export class WebSocketClient {
   }
 
   // Wait for a response to a specific message
-  private waitForResponse(messageId: string): Promise<any> {
+  private waitForResponse(messageId: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingMessages.delete(messageId);
@@ -290,69 +286,91 @@ export class WebSocketClient {
   // Handle incoming messages
   private handleIncomingMessage(data: string): void {
     try {
-      const message = JSON.parse(data);
+      const message: IncomingMessage = JSON.parse(data);
 
       // Validate message if enabled
       if (this.config.validateMessages) {
         try {
-          serverMessageSchema.parse(message);
+          WebSocketProtocolMessageSchema.parse(message);
         } catch (error) {
           if (error instanceof z.ZodError) {
-            this.errorHandler.handleMessageError(message);
+            const wsError = this.errorHandler.handleMessageError(message);
+            const appError = new AppError(
+              wsError.message,
+              ErrorCategory.WEBSOCKET,
+              ErrorSeverity.MEDIUM,
+              wsError.code
+            );
+            this.handlers.onError?.(appError);
             return;
           }
         }
       }
 
-      // Handle response to pending message
+      // Handle response correlation
       if (message.id && this.pendingMessages.has(message.id)) {
-        const pending = this.pendingMessages.get(message.id)!;
-        clearTimeout(pending.timeout);
+        const { resolve, timeout } = this.pendingMessages.get(message.id)!;
+        clearTimeout(timeout);
         this.pendingMessages.delete(message.id);
-
-        if (message.type === "error") {
-          pending.reject(
-            new AppError(
-              message.payload?.message || "Server error",
-              ErrorCategory.WEBSOCKET,
-              ErrorSeverity.MEDIUM,
-              message.payload?.code
-            )
-          );
-        } else {
-          pending.resolve(message.payload);
-        }
+        resolve(message);
         return;
       }
 
-      // Handle heartbeat/ping responses
+      // Handle heartbeat
       if (message.type === "pong") {
         return; // Heartbeat acknowledged
       }
 
       // Pass message to handler
       this.handlers.onMessage?.(message);
-    } catch (error) {
+    } catch (_error) {
       const wsError = this.errorHandler.handleMessageError(data);
-      this.handlers.onError?.(wsError);
+      const appError = new AppError(
+        wsError.message,
+        ErrorCategory.WEBSOCKET,
+        ErrorSeverity.MEDIUM,
+        wsError.code
+      );
+      this.handlers.onError?.(appError);
     }
   }
 
   // Handle connection errors
-  private handleConnectionError(error: any): void {
+  private handleConnectionError(error: unknown): void {
     this.setState(ConnectionState.FAILED);
-    this.handlers.onError?.(error);
+
+    const appError = AppError.fromUnknown(
+      error,
+      "WebSocket connection error",
+      ErrorCategory.WEBSOCKET
+    );
+
+    notifications.error({
+      title: "Connection Error",
+      description: appError.message,
+      duration: 5000,
+    });
+
+    this.handlers.onError?.(appError);
 
     // Attempt reconnection
     this.attemptReconnection();
   }
 
-  // Handle disconnections
+  // Handle WebSocket disconnection
   private handleDisconnection(event: CloseEvent): void {
-    const wasConnected = this.state === ConnectionState.CONNECTED;
     this.setState(ConnectionState.DISCONNECTED);
+    this.clearHeartbeat();
 
-    if (wasConnected) {
+    // Log disconnect for debugging
+    console.debug("WebSocket disconnected:", {
+      code: event.code,
+      reason: event.reason,
+      wasClean: event.wasClean,
+    });
+
+    // Don't show notification for clean disconnections
+    if (event.code !== 1000 && event.code !== 1001) {
       notifications.warning({
         title: "Connection Lost",
         description: "Lost connection to the simulation server.",
@@ -402,7 +420,7 @@ export class WebSocketClient {
       try {
         await this.connect();
         this.handlers.onReconnect?.(this.reconnectAttempts);
-      } catch (error) {
+      } catch {
         this.attemptReconnection();
       }
     }, delay);
@@ -478,7 +496,7 @@ export class WebSocketClient {
 
 // Simulation-specific WebSocket client
 export class SimulationWebSocketClient extends WebSocketClient {
-  async startSimulation(parameters: any): Promise<any> {
+  async startSimulation(parameters: Record<string, unknown>): Promise<unknown> {
     return this.sendMessage(
       {
         type: "start_simulation",
@@ -488,7 +506,7 @@ export class SimulationWebSocketClient extends WebSocketClient {
     );
   }
 
-  async stopSimulation(simulationId: string): Promise<any> {
+  async stopSimulation(simulationId: string): Promise<unknown> {
     return this.sendMessage(
       {
         type: "stop_simulation",
@@ -498,7 +516,7 @@ export class SimulationWebSocketClient extends WebSocketClient {
     );
   }
 
-  async pauseSimulation(simulationId: string): Promise<any> {
+  async pauseSimulation(simulationId: string): Promise<unknown> {
     return this.sendMessage(
       {
         type: "pause_simulation",
@@ -508,7 +526,7 @@ export class SimulationWebSocketClient extends WebSocketClient {
     );
   }
 
-  async resumeSimulation(simulationId: string): Promise<any> {
+  async resumeSimulation(simulationId: string): Promise<unknown> {
     return this.sendMessage(
       {
         type: "resume_simulation",
@@ -518,7 +536,7 @@ export class SimulationWebSocketClient extends WebSocketClient {
     );
   }
 
-  async getSimulationStatus(simulationId: string): Promise<any> {
+  async getSimulationStatus(simulationId: string): Promise<unknown> {
     return this.sendMessage(
       {
         type: "get_status",
@@ -545,11 +563,3 @@ export class SimulationWebSocketClient extends WebSocketClient {
 
 // Create and export default instance
 export const simulationWebSocket = new SimulationWebSocketClient();
-
-// Export types and enums
-export type {
-  WebSocketClientConfig,
-  WebSocketEventHandlers,
-  IncomingMessage,
-  OutgoingMessage,
-};

@@ -155,59 +155,61 @@ export const BatchUpdatePayloadSchema = z.object({
   batch_index: z.number().int().min(0, "Batch index cannot be negative"),
 });
 
-// Main WebSocket Message Schema
-export const WebSocketProtocolMessageSchema = z
-  .object({
-    // Message Identification
-    type: MessageTypeSchema,
-    id: z
-      .string()
-      .min(1, "Message ID is required")
-      .default(() => crypto.randomUUID()),
-    timestamp: z
-      .string()
-      .refine(val => !isNaN(Date.parse(val)), {
-        message: "Invalid timestamp format",
-      })
-      .default(() => new Date().toISOString()),
+// Main WebSocket Message Schema (Base without refines for extending)
+const WebSocketProtocolMessageBaseSchema = z.object({
+  // Message Identification
+  type: MessageTypeSchema,
+  id: z
+    .string()
+    .min(1, "Message ID is required")
+    .default(() => crypto.randomUUID()),
+  timestamp: z
+    .string()
+    .refine(val => !isNaN(Date.parse(val)), {
+      message: "Invalid timestamp format",
+    })
+    .default(() => new Date().toISOString()),
 
-    // Protocol Information
-    protocol_version: z.string().default(PROTOCOL_VERSION),
-    priority: PrioritySchema.default("normal"),
+  // Protocol Information
+  protocol_version: z.string().default(PROTOCOL_VERSION),
+  priority: PrioritySchema.default("normal"),
 
-    // Connection Context
-    client_id: z
-      .string()
-      .min(1, "Client ID is required")
-      .max(50, "Client ID cannot exceed 50 characters")
-      .regex(
-        /^[a-zA-Z0-9_-]+$/,
-        "Client ID can only contain alphanumeric characters, hyphens, and underscores"
-      ),
-    session_id: z.string().optional(),
+  // Connection Context
+  client_id: z
+    .string()
+    .min(1, "Client ID is required")
+    .max(50, "Client ID cannot exceed 50 characters")
+    .regex(
+      /^[a-zA-Z0-9_-]+$/,
+      "Client ID can only contain alphanumeric characters, hyphens, and underscores"
+    ),
+  session_id: z.string().optional(),
 
-    // Message Content
-    simulation_id: z.string().optional(),
-    data: z.record(z.any()).optional(),
+  // Message Content
+  simulation_id: z.string().optional(),
+  data: z.record(z.any()).optional(),
 
-    // Error Information
-    error: ErrorPayloadSchema.optional(),
+  // Error Information
+  error: ErrorPayloadSchema.optional(),
 
-    // Protocol Features
-    compression: CompressionTypeSchema.default("none"),
-    encrypted: z.boolean().default(false),
+  // Protocol Features
+  compression: CompressionTypeSchema.default("none"),
+  encrypted: z.boolean().default(false),
 
-    // Message Metadata
-    correlation_id: z.string().optional(),
-    reply_to: z.string().optional(),
-    expires_at: z
-      .string()
-      .refine(val => !isNaN(Date.parse(val)), {
-        message: "Invalid expiration timestamp format",
-      })
-      .optional(),
-  })
-  .refine(
+  // Message Metadata
+  correlation_id: z.string().optional(),
+  reply_to: z.string().optional(),
+  expires_at: z
+    .string()
+    .refine(val => !isNaN(Date.parse(val)), {
+      message: "Invalid expiration timestamp format",
+    })
+    .optional(),
+});
+
+// Main WebSocket Message Schema with validation rules
+export const WebSocketProtocolMessageSchema =
+  WebSocketProtocolMessageBaseSchema.refine(
     data => {
       // Validate simulation_id when required
       const requiresSimulationId = [
@@ -232,8 +234,7 @@ export const WebSocketProtocolMessageSchema = z
       message: "Simulation ID is required for simulation-related messages",
       path: ["simulation_id"],
     }
-  )
-  .refine(
+  ).refine(
     data => {
       // Validate that error messages have error payload
       if (
@@ -252,47 +253,52 @@ export const WebSocketProtocolMessageSchema = z
     }
   );
 
-// Type-specific Message Schemas
-export const AuthRequestSchema = WebSocketProtocolMessageSchema.extend({
+// Type-specific Message Schemas (using base schema for extending)
+export const AuthRequestSchema = WebSocketProtocolMessageBaseSchema.extend({
   type: z.literal("auth_request"),
   data: AuthPayloadSchema,
 });
 
-export const SubscriptionRequestSchema = WebSocketProtocolMessageSchema.extend({
-  type: z.enum(["subscribe", "unsubscribe"]),
-  data: SubscriptionPayloadSchema,
-  simulation_id: z.string(),
-});
+export const SubscriptionRequestSchema =
+  WebSocketProtocolMessageBaseSchema.extend({
+    type: z.enum(["subscribe", "unsubscribe"]),
+    data: SubscriptionPayloadSchema,
+    simulation_id: z.string(),
+  });
 
-export const SimulationControlSchema = WebSocketProtocolMessageSchema.extend({
-  type: z.enum([
-    "simulation_start",
-    "simulation_stop",
-    "simulation_pause",
-    "simulation_resume",
-    "simulation_reset",
-  ]),
-  data: SimulationControlPayloadSchema,
-  simulation_id: z.string(),
-});
+export const SimulationControlSchema =
+  WebSocketProtocolMessageBaseSchema.extend({
+    type: z.enum([
+      "simulation_start",
+      "simulation_stop",
+      "simulation_pause",
+      "simulation_resume",
+      "simulation_reset",
+    ]),
+    data: SimulationControlPayloadSchema,
+    simulation_id: z.string(),
+  });
 
-export const SimulationUpdateSchema = WebSocketProtocolMessageSchema.extend({
-  type: z.literal("simulation_update"),
-  data: SimulationDataPayloadSchema,
-  simulation_id: z.string(),
-});
+export const SimulationUpdateSchema = WebSocketProtocolMessageBaseSchema.extend(
+  {
+    type: z.literal("simulation_update"),
+    data: SimulationDataPayloadSchema,
+    simulation_id: z.string(),
+  }
+);
 
-export const PerformanceUpdateSchema = WebSocketProtocolMessageSchema.extend({
-  type: z.literal("performance_update"),
-  data: PerformanceDataPayloadSchema,
-});
+export const PerformanceUpdateSchema =
+  WebSocketProtocolMessageBaseSchema.extend({
+    type: z.literal("performance_update"),
+    data: PerformanceDataPayloadSchema,
+  });
 
-export const ErrorMessageSchema = WebSocketProtocolMessageSchema.extend({
+export const ErrorMessageSchema = WebSocketProtocolMessageBaseSchema.extend({
   type: z.enum(["error", "warning", "validation_error", "rate_limit_error"]),
   error: ErrorPayloadSchema,
 });
 
-export const HeartbeatSchema = WebSocketProtocolMessageSchema.extend({
+export const HeartbeatSchema = WebSocketProtocolMessageBaseSchema.extend({
   type: z.enum(["ping", "pong"]),
 });
 

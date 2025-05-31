@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+"use client";
+
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { StagewiseToolbar } from "@stagewise/toolbar-next";
@@ -26,12 +27,6 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
-export const metadata: Metadata = {
-  title: "Bacterial Antibiotic Resistance Simulation",
-  description:
-    "Interactive web simulation modeling bacterial evolution and antibiotic resistance spread using computational biology and data visualization",
-};
 
 export default function RootLayout({
   children,

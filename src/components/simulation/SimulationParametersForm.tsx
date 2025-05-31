@@ -28,21 +28,20 @@ import { formatNumber, formatPercentage } from "@/lib/utils";
 import {
   useNotifications,
   ValidationAlert,
-  FieldError,
+  ValidationError,
 } from "@/components/ui/notification-system";
 import {
   ValidationErrorHandler,
   SimulationErrorHandler,
-  errorUtils,
 } from "@/lib/error-handling";
 import {
   FormStateManager,
   autoSaveManager,
   GracefulDegradationManager,
   RecoveryFlowManager,
-  recoveryUtils,
+  RecoveryUtils,
 } from "@/lib/recovery-mechanisms";
-import { simulationParametersSchema } from "@/lib/schemas/api";
+import { SimulationParametersApiSchema } from "@/lib/schemas/api";
 import { useNotifications as useNotificationsHook } from "@/hooks/useNotifications";
 
 const defaultParameters: SimulationParameters = {
@@ -113,33 +112,38 @@ export default function SimulationParametersForm() {
   const [parameters, setParameters] =
     useState<SimulationParameters>(defaultParameters);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [validationErrors, setValidationErrors] = useState<any[]>([]);
-  const [isValidating, setIsValidating] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
+    []
+  );
   const [announceMessage, setAnnounceMessage] = useState<string>("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [isAutoSaveEnabled] = useState(true);
 
   // Get notification system hooks
   const { validateAndNotify, showNotification } = useNotifications();
 
   // Refs for focus management
   const firstErrorRef = useRef<HTMLDivElement>(null);
-  const submitButtonRef = useRef<HTMLButtonElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   // Form ID for recovery mechanisms
   const FORM_ID = "simulation-parameters-form";
 
-  // Initialize recovery mechanisms
+  // Screen reader announcement
+  const announceToScreenReader = useCallback((message: string) => {
+    setAnnounceMessage(message);
+    // Clear after a brief delay to allow screen reader to announce
+    setTimeout(() => setAnnounceMessage(""), 1000);
+  }, []);
+
+  // Initialize form and auto-save functionality
   useEffect(() => {
-    // Check for previous session data
+    // Restore form state if available
     if (FormStateManager.hasFormState(FORM_ID)) {
       FormStateManager.restoreFormState(FORM_ID, {
         showNotification: true,
         onRestore: data => {
-          setParameters(data);
-          setHasUnsavedChanges(false);
-          announceToScreenReader("Previous form data has been restored.");
+          setParameters(data as SimulationParameters);
         },
         onError: error => {
           console.error("Failed to restore form state:", error);
@@ -153,7 +157,7 @@ export default function SimulationParametersForm() {
         key: FORM_ID,
         interval: 30000, // Save every 30 seconds
         maxVersions: 5,
-        enabled: autoSaveEnabled,
+        enabled: isAutoSaveEnabled,
       },
       () => parameters,
       () => {
@@ -162,18 +166,32 @@ export default function SimulationParametersForm() {
     );
 
     // Register form features for graceful degradation
-    GracefulDegradationManager.registerFeature("validation", true);
-    GracefulDegradationManager.registerFeature(
-      "autosave",
-      recoveryUtils.checkBrowserSupport()
-    );
+    const browserSupport = RecoveryUtils.checkBrowserSupport();
+
+    // Enable graceful degradation for validation if needed
+    if (!browserSupport.localStorage) {
+      GracefulDegradationManager.enableFeatureDegradation({
+        feature: "validation",
+        userMessage: "Advanced validation is temporarily unavailable",
+        retryEnabled: true,
+      });
+    }
+
+    // Enable graceful degradation for autosave if browser doesn't support required features
+    if (!browserSupport.localStorage || !browserSupport.sessionStorage) {
+      GracefulDegradationManager.enableFeatureDegradation({
+        feature: "autosave",
+        userMessage: "Auto-save is temporarily unavailable",
+        retryEnabled: false,
+      });
+    }
 
     // Check for recovery data on component mount
     if (FormStateManager.hasRecoveryData(FORM_ID)) {
       RecoveryFlowManager.offerDataRecovery(
         FORM_ID,
         recoveredData => {
-          setParameters(recoveredData);
+          setParameters(recoveredData as SimulationParameters);
           addNotification({
             type: "success",
             title: "Data Restored",
@@ -196,7 +214,7 @@ export default function SimulationParametersForm() {
     return () => {
       autoSaveManager.stopAutoSave(FORM_ID);
     };
-  }, []);
+  }, [addNotification, announceToScreenReader, isAutoSaveEnabled, parameters]);
 
   // Track unsaved changes
   useEffect(() => {
@@ -218,104 +236,97 @@ export default function SimulationParametersForm() {
     }
   }, [parameters]);
 
-  // Screen reader announcement
-  const announceToScreenReader = useCallback((message: string) => {
-    setAnnounceMessage(message);
-    // Clear after a brief delay to allow screen reader to announce
-    setTimeout(() => setAnnounceMessage(""), 1000);
-  }, []);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsValidating(true);
 
     try {
-      // Use graceful degradation for validation
-      const validationResult = GracefulDegradationManager.executeWithFallback(
-        "validation",
-        () => {
-          // Primary validation using centralized system
-          return validateAndNotify(
-            parameters,
-            simulationParametersSchema,
-            validatedData => {
-              // Success callback
-              console.log("✅ Valid simulation parameters:", validatedData);
-              setErrors({});
-              setValidationErrors([]);
-              setHasUnsavedChanges(false);
+      // Check if validation is degraded, use fallback if needed
+      if (GracefulDegradationManager.isFeatureDegraded("validation")) {
+        // Try to execute fallback first
+        const fallbackSuccess =
+          GracefulDegradationManager.executeFallback("validation");
 
-              // Clear saved form state on successful submission
-              FormStateManager.clearFormState(FORM_ID);
-
-              showNotification("success", {
-                title: "Parameters Validated",
-                description:
-                  "Simulation parameters are valid and ready to use.",
-                duration: 4000,
-              });
-
-              announceToScreenReader(
-                "Simulation parameters validated successfully. Ready to start simulation."
-              );
-
-              // This will be connected to the backend simulation API
-              // simulationAPI.startSimulation(validatedData);
-            },
-            validationErrors => {
-              // Error callback with recovery flow
-              const errorMap: Record<string, string> = {};
-
-              validationErrors.forEach(error => {
-                errorMap[error.field] = error.message;
-              });
-
-              setErrors(errorMap);
-              setValidationErrors(validationErrors);
-
-              // Show recovery flow for validation errors
-              RecoveryFlowManager.showValidationRecoveryFlow(
-                validationErrors,
-                () => {
-                  // Focus first error field
-                  setTimeout(() => {
-                    if (firstErrorRef.current) {
-                      firstErrorRef.current.focus();
-                    }
-                  }, 100);
-                }
-              );
-
-              const errorCount = validationErrors.length;
-              announceToScreenReader(
-                `Validation failed. ${errorCount} error${
-                  errorCount !== 1 ? "s" : ""
-                } found. Please review and correct the highlighted fields.`
-              );
-            }
-          );
-        },
-        () => {
-          // Fallback validation using basic validation
+        if (!fallbackSuccess) {
+          // Use basic validation as last resort
           const validation = validateSimulationParameters(parameters);
 
           if (validation.success) {
             setErrors({});
             setValidationErrors([]);
             showNotification("success", {
-              title: "Parameters Validated (Fallback)",
+              title: "Parameters Validated (Basic)",
               description:
                 "Basic validation passed. Some advanced features may be unavailable.",
               duration: 4000,
             });
-            return true;
           } else {
-            RecoveryFlowManager.showFeatureUnavailableFlow(
-              "Advanced Validation",
-              ["Basic validation", "Manual review"]
-            );
-            return false;
+            showNotification("error", {
+              title: "Validation Failed",
+              description: "Please check your inputs and try again.",
+              duration: 4000,
+            });
           }
+          return;
+        }
+      }
+
+      // Primary validation using centralized system
+      validateAndNotify(
+        parameters,
+        SimulationParametersApiSchema,
+        validatedData => {
+          // Success callback
+          console.log("✅ Valid simulation parameters:", validatedData);
+          setErrors({});
+          setValidationErrors([]);
+          setHasUnsavedChanges(false);
+
+          // Clear saved form state on successful submission
+          FormStateManager.clearFormState(FORM_ID);
+
+          showNotification("success", {
+            title: "Parameters Validated",
+            description: "Simulation parameters are valid and ready to use.",
+            duration: 4000,
+          });
+
+          announceToScreenReader(
+            "Simulation parameters validated successfully. Ready to start simulation."
+          );
+
+          // This will be connected to the backend simulation API
+          // simulationAPI.startSimulation(validatedData);
+        },
+        validationErrors => {
+          // Error callback with recovery flow
+          const errorMap: Record<string, string> = {};
+
+          validationErrors.forEach(error => {
+            errorMap[error.field] = error.message;
+          });
+
+          setErrors(errorMap);
+          setValidationErrors(validationErrors);
+
+          // Show recovery flow for validation errors
+          RecoveryFlowManager.showValidationRecoveryFlow(
+            validationErrors,
+            () => {
+              // Focus first error field
+              setTimeout(() => {
+                if (firstErrorRef.current) {
+                  firstErrorRef.current.focus();
+                }
+              }, 100);
+            }
+          );
+
+          const errorCount = validationErrors.length;
+          announceToScreenReader(
+            `Validation failed. ${errorCount} error${
+              errorCount !== 1 ? "s" : ""
+            } found. Please review and correct the highlighted fields.`
+          );
         }
       );
     } catch (error) {
@@ -325,37 +336,34 @@ export default function SimulationParametersForm() {
       );
       announceToScreenReader("An unexpected error occurred during validation.");
 
-      // Show error recovery flow
-      if (error instanceof Error) {
-        RecoveryFlowManager.showErrorRecoveryFlow(error as any, [
-          {
-            label: "Retry Validation",
-            action: () => handleSubmit(e),
-          },
-          {
-            label: "Reset Form",
-            action: handleReset,
-          },
-        ]);
-      }
-    } finally {
-      setIsValidating(false);
+      // Show error recovery with retry option
+      RecoveryFlowManager.offerRetryWithOptions(
+        "Parameter validation",
+        async () => {
+          handleSubmit(e);
+        },
+        {
+          maxRetries: 2,
+          fallbackFn: handleReset,
+          fallbackLabel: "Reset Form",
+        }
+      );
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     // Check for unsaved changes before reset
     if (hasUnsavedChanges) {
-      RecoveryFlowManager.showDataLossPreventionFlow(FORM_ID, data => {
-        // Save current state before reset
-        recoveryUtils.createCheckpoint("before_reset", parameters);
+      const shouldContinue = await RecoveryFlowManager.confirmDataLoss(
+        "You have unsaved changes. Are you sure you want to reset the form?"
+      );
 
-        // Proceed with reset
-        performReset();
-      });
-    } else {
-      performReset();
+      if (!shouldContinue) {
+        return;
+      }
     }
+
+    performReset();
   };
 
   const performReset = () => {
@@ -414,67 +422,6 @@ export default function SimulationParametersForm() {
 
         return newErrors;
       });
-    }
-  };
-
-  const updateFitnessValue = (
-    key: keyof SimulationParameters["fitnessValues"],
-    value: number
-  ) => {
-    setParameters(prev => ({
-      ...prev,
-      fitnessValues: {
-        ...prev.fitnessValues,
-        [key]: value,
-      },
-    }));
-
-    // Clear fitness-related errors temporarily
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors.fitnessValues;
-      return newErrors;
-    });
-  };
-
-  const updateGridSize = (
-    key: keyof SimulationParameters["gridSize"],
-    value: number
-  ) => {
-    const newParameters = {
-      ...parameters,
-      gridSize: {
-        ...parameters.gridSize,
-        [key]: value,
-      },
-    };
-
-    setParameters(newParameters);
-
-    // Announce grid size changes for screen readers
-    const totalCells =
-      newParameters.gridSize.width * newParameters.gridSize.height;
-    if (totalCells > 40000) {
-      announceToScreenReader(
-        `Warning: Grid size is ${formatNumber(
-          totalCells
-        )} cells. This may impact performance.`
-      );
-    }
-
-    // Clear grid-related errors temporarily
-    setErrors(prev => {
-      const newErrors = { ...prev };
-      delete newErrors.gridSize;
-      return newErrors;
-    });
-  };
-
-  // Keyboard navigation helpers
-  const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      action();
     }
   };
 
@@ -1050,401 +997,10 @@ export default function SimulationParametersForm() {
                     parameters.antibioticConcentration,
                     { decimals: 2 }
                   )} times`}
-                  aria-describedby={
-                    errors.antibioticConcentration
-                      ? "antibioticConcentration-error"
-                      : "antibioticConcentration-range"
-                  }
-                  aria-invalid={!!errors.antibioticConcentration}
                 />
-                <div
-                  id="antibioticConcentration-range"
-                  className="flex justify-between text-xs text-gray-500"
-                  role="group"
-                  aria-label="Antibiotic concentration range"
-                >
-                  <span>0.1x</span>
-                  <span>10x</span>
-                </div>
-                {errors.antibioticConcentration && (
-                  <Alert
-                    variant="destructive"
-                    className="py-2"
-                    ref={!firstErrorRef.current ? firstErrorRef : undefined}
-                    tabIndex={-1}
-                  >
-                    <AlertDescription
-                      className="text-sm"
-                      id="antibioticConcentration-error"
-                      role="alert"
-                    >
-                      {errors.antibioticConcentration}
-                    </AlertDescription>
-                  </Alert>
-                )}
               </div>
             </CardContent>
           </Card>
-
-          {/* Fitness Parameters */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                Fitness Parameters
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p>
-                      Define the relative reproductive success of resistant vs.
-                      sensitive bacteria under different conditions.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <CardDescription>
-                Relative fitness values for resistant and sensitive bacteria
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label
-                  htmlFor="resistantFitness"
-                  className="flex items-center gap-2"
-                >
-                  Resistant Fitness:{" "}
-                  {formatNumber(parameters.fitnessValues.resistantFitness, {
-                    decimals: 2,
-                  })}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-sm">
-                      <p>{helpText.resistantFitness}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <Slider
-                  id="resistantFitness"
-                  min={0.1}
-                  max={1.5}
-                  step={0.01}
-                  value={[parameters.fitnessValues.resistantFitness]}
-                  onValueChange={value =>
-                    updateFitnessValue("resistantFitness", value[0])
-                  }
-                  className="w-full"
-                  aria-label={`Resistant Fitness: ${formatNumber(
-                    parameters.fitnessValues.resistantFitness,
-                    { decimals: 2 }
-                  )}`}
-                  aria-describedby="resistantFitness-range"
-                />
-                <div
-                  id="resistantFitness-range"
-                  className="flex justify-between text-xs text-gray-500"
-                  role="group"
-                  aria-label="Resistant fitness range"
-                >
-                  <span>0.1</span>
-                  <span>1.5</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="sensitiveFitness"
-                  className="flex items-center gap-2"
-                >
-                  Sensitive Fitness:{" "}
-                  {formatNumber(parameters.fitnessValues.sensitiveFitness, {
-                    decimals: 2,
-                  })}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-sm">
-                      <p>{helpText.sensitiveFitness}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <Slider
-                  id="sensitiveFitness"
-                  min={0.1}
-                  max={1.5}
-                  step={0.01}
-                  value={[parameters.fitnessValues.sensitiveFitness]}
-                  onValueChange={value =>
-                    updateFitnessValue("sensitiveFitness", value[0])
-                  }
-                  className="w-full"
-                  aria-label={`Sensitive Fitness: ${formatNumber(
-                    parameters.fitnessValues.sensitiveFitness,
-                    { decimals: 2 }
-                  )}`}
-                  aria-describedby="sensitiveFitness-range"
-                />
-                <div
-                  id="sensitiveFitness-range"
-                  className="flex justify-between text-xs text-gray-500"
-                  role="group"
-                  aria-label="Sensitive fitness range"
-                >
-                  <span>0.1</span>
-                  <span>1.5</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="resistanceCost"
-                  className="flex items-center gap-2"
-                >
-                  Resistance Cost:{" "}
-                  {formatNumber(parameters.fitnessValues.resistanceCost, {
-                    decimals: 2,
-                  })}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-sm">
-                      <p>{helpText.resistanceCost}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <Slider
-                  id="resistanceCost"
-                  min={0}
-                  max={0.5}
-                  step={0.01}
-                  value={[parameters.fitnessValues.resistanceCost]}
-                  onValueChange={value =>
-                    updateFitnessValue("resistanceCost", value[0])
-                  }
-                  className="w-full"
-                  aria-label={`Resistance Cost: ${formatNumber(
-                    parameters.fitnessValues.resistanceCost,
-                    { decimals: 2 }
-                  )}`}
-                  aria-describedby="resistanceCost-range"
-                />
-                <div
-                  id="resistanceCost-range"
-                  className="flex justify-between text-xs text-gray-500"
-                  role="group"
-                  aria-label="Resistance cost range"
-                >
-                  <span>0</span>
-                  <span>0.5</span>
-                </div>
-              </div>
-
-              {errors.fitnessValues && (
-                <Alert
-                  variant="destructive"
-                  className="py-2"
-                  ref={!firstErrorRef.current ? firstErrorRef : undefined}
-                  tabIndex={-1}
-                >
-                  <AlertDescription className="text-sm" role="alert">
-                    {errors.fitnessValues}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Spatial Parameters */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                Spatial Parameters
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p>
-                      Configure the spatial environment where bacteria live and
-                      interact. Spatial structure affects evolution patterns.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <CardDescription>
-                Grid size and spatial distribution settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="gridWidth"
-                    className="flex items-center gap-2"
-                  >
-                    Grid Width: {parameters.gridSize.width}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-sm">
-                        <p>{helpText.gridWidth}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </Label>
-                  <Slider
-                    id="gridWidth"
-                    min={50}
-                    max={200}
-                    step={10}
-                    value={[parameters.gridSize.width]}
-                    onValueChange={value => updateGridSize("width", value[0])}
-                    className="w-full"
-                    aria-label={`Grid Width: ${parameters.gridSize.width}`}
-                    aria-describedby="gridWidth-range"
-                  />
-                  <div
-                    id="gridWidth-range"
-                    className="flex justify-between text-xs text-gray-500"
-                    role="group"
-                    aria-label="Grid width range"
-                  >
-                    <span>50</span>
-                    <span>200</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="gridHeight"
-                    className="flex items-center gap-2"
-                  >
-                    Grid Height: {parameters.gridSize.height}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-sm">
-                        <p>{helpText.gridHeight}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </Label>
-                  <Slider
-                    id="gridHeight"
-                    min={50}
-                    max={200}
-                    step={10}
-                    value={[parameters.gridSize.height]}
-                    onValueChange={value => updateGridSize("height", value[0])}
-                    className="w-full"
-                    aria-label={`Grid Height: ${parameters.gridSize.height}`}
-                    aria-describedby="gridHeight-range"
-                  />
-                  <div
-                    id="gridHeight-range"
-                    className="flex justify-between text-xs text-gray-500"
-                    role="group"
-                    aria-label="Grid height range"
-                  >
-                    <span>50</span>
-                    <span>200</span>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className={`p-3 rounded-md ${
-                  parameters.gridSize.width * parameters.gridSize.height > 40000
-                    ? "bg-red-50 border border-red-200"
-                    : "bg-blue-50"
-                }`}
-                role="status"
-                aria-live="polite"
-              >
-                <p
-                  className={`text-sm ${
-                    parameters.gridSize.width * parameters.gridSize.height >
-                    40000
-                      ? "text-red-700"
-                      : "text-blue-700"
-                  }`}
-                >
-                  <strong>Total Grid Cells:</strong>{" "}
-                  {formatNumber(
-                    parameters.gridSize.width * parameters.gridSize.height
-                  )}
-                  {parameters.gridSize.width * parameters.gridSize.height >
-                    40000 && (
-                    <span className="block mt-1 font-medium">
-                      ⚠️ Grid too large for optimal performance
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              {errors.gridSize && (
-                <Alert
-                  variant="destructive"
-                  className="py-2"
-                  ref={!firstErrorRef.current ? firstErrorRef : undefined}
-                  tabIndex={-1}
-                >
-                  <AlertDescription className="text-sm" role="alert">
-                    {errors.gridSize}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Form Actions */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t">
-          <Button
-            ref={submitButtonRef}
-            type="submit"
-            className="flex-1 sm:flex-none"
-            disabled={
-              isValidating || Object.values(errors).some(error => error)
-            }
-            aria-describedby="submit-status"
-          >
-            {isValidating ? "Validating..." : "Start Simulation"}
-          </Button>
-          <div id="submit-status" className="sr-only" aria-live="polite">
-            {Object.values(errors).some(error => error)
-              ? "Cannot submit: form contains validation errors"
-              : "Ready to submit simulation"}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleReset}
-            onKeyDown={e => handleKeyDown(e, handleReset)}
-          >
-            Reset to Defaults
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            aria-describedby="preset-feature-note"
-          >
-            Load Preset
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            aria-describedby="preset-feature-note"
-          >
-            Save as Preset
-          </Button>
-          <div id="preset-feature-note" className="sr-only">
-            Preset functionality will be implemented in future updates
-          </div>
         </div>
       </form>
     </TooltipProvider>

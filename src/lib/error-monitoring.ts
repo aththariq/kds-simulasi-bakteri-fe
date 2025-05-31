@@ -1,6 +1,24 @@
 import { toast } from "sonner";
 import { AppError, ErrorCategory, ErrorSeverity } from "./error-handling";
 
+// Additional type definitions for browser APIs
+interface PerformanceWithMemory extends Performance {
+  memory: {
+    usedJSHeapSize: number;
+    totalJSHeapSize: number;
+    jsHeapSizeLimit: number;
+  };
+}
+
+interface NavigatorWithConnection extends Navigator {
+  connection?: {
+    type?: string;
+    effectiveType?: string;
+  };
+}
+
+type BreadcrumbLevel = "debug" | "info" | "warning" | "error";
+
 // Types for error monitoring
 export interface ErrorReport {
   id: string;
@@ -20,11 +38,11 @@ export interface ErrorReport {
 export interface ErrorContext {
   component?: string;
   action?: string;
-  formData?: any;
+  formData?: Record<string, unknown>;
   apiEndpoint?: string;
   websocketEvent?: string;
   simulationId?: string;
-  userInput?: any;
+  userInput?: Record<string, unknown>;
   networkStatus?: "online" | "offline";
   browserInfo?: BrowserInfo;
   performanceMetrics?: PerformanceMetrics;
@@ -35,7 +53,7 @@ export interface Breadcrumb {
   category: "navigation" | "user" | "api" | "websocket" | "error" | "info";
   message: string;
   level: "debug" | "info" | "warning" | "error";
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 export interface BrowserInfo {
@@ -195,7 +213,7 @@ export class ErrorMonitoringSystem {
   }
 
   // User context management
-  setUser(userId: string, userData?: Record<string, any>): void {
+  setUser(userId: string, userData?: Record<string, unknown>): void {
     this.userId = userId;
     this.addBreadcrumb({
       category: "user",
@@ -328,9 +346,10 @@ export class ErrorMonitoringSystem {
     // Unhandled JavaScript errors
     window.addEventListener("error", event => {
       const error = new AppError(
-        ErrorCategory.SYSTEM,
         event.message || "Unhandled JavaScript error",
+        ErrorCategory.SYSTEM,
         ErrorSeverity.HIGH,
+        "UNHANDLED_JS_ERROR",
         { originalError: event.error }
       );
 
@@ -348,9 +367,10 @@ export class ErrorMonitoringSystem {
     // Unhandled Promise rejections
     window.addEventListener("unhandledrejection", event => {
       const error = new AppError(
-        ErrorCategory.SYSTEM,
         `Unhandled Promise rejection: ${event.reason}`,
+        ErrorCategory.SYSTEM,
         ErrorSeverity.HIGH,
+        "UNHANDLED_PROMISE_REJECTION",
         { originalError: event.reason }
       );
 
@@ -394,10 +414,10 @@ export class ErrorMonitoringSystem {
     // Monitor memory usage (if available)
     if ("memory" in performance) {
       setInterval(() => {
-        const memory = (performance as any).memory;
+        const memory = (performance as PerformanceWithMemory).memory;
         if (memory.usedJSHeapSize > memory.jsHeapSizeLimit * 0.9) {
           this.addBreadcrumb({
-            category: "warning",
+            category: "info",
             message: "High memory usage detected",
             level: "warning",
             data: {
@@ -480,7 +500,7 @@ export class ErrorMonitoringSystem {
 
     window.addEventListener("offline", () => {
       this.addBreadcrumb({
-        category: "warning",
+        category: "info",
         message: "Network connection lost",
         level: "warning",
       });
@@ -490,7 +510,15 @@ export class ErrorMonitoringSystem {
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
       const startTime = Date.now();
-      const url = typeof args[0] === "string" ? args[0] : args[0].url;
+      let url: string;
+      if (typeof args[0] === "string") {
+        url = args[0];
+      } else if (args[0] instanceof URL) {
+        url = args[0].href;
+      } else {
+        // Request object
+        url = args[0].url;
+      }
 
       try {
         const response = await originalFetch(...args);
@@ -532,18 +560,24 @@ export class ErrorMonitoringSystem {
   private setupConsoleCapture(): void {
     if (!this.config.enableConsoleCapture) return;
 
-    const originalConsole = { ...console };
+    const originalMethods = {
+      error: console.error,
+      warn: console.warn,
+      info: console.info,
+      debug: console.debug,
+    };
 
-    ["error", "warn", "info", "debug"].forEach(level => {
-      (console as any)[level] = (...args: any[]) => {
+    (["error", "warn", "info", "debug"] as const).forEach(level => {
+      const originalMethod = originalMethods[level];
+      console[level] = (...args: unknown[]) => {
         this.addBreadcrumb({
           category: "info",
           message: `Console ${level}: ${args.join(" ")}`,
-          level: level as any,
+          level: level as BreadcrumbLevel,
           data: { args },
         });
 
-        (originalConsole as any)[level](...args);
+        originalMethod.apply(console, args);
       };
     });
   }
@@ -617,14 +651,16 @@ export class ErrorMonitoringSystem {
     const metrics: PerformanceMetrics = {};
 
     if ("memory" in performance) {
-      const memory = (performance as any).memory;
+      const memory = (performance as PerformanceWithMemory).memory;
       metrics.memoryUsage = memory.usedJSHeapSize;
     }
 
     if ("connection" in navigator) {
-      const connection = (navigator as any).connection;
-      metrics.connectionType = connection.type;
-      metrics.effectiveType = connection.effectiveType;
+      const connection = (navigator as NavigatorWithConnection).connection;
+      if (connection) {
+        metrics.connectionType = connection.type;
+        metrics.effectiveType = connection.effectiveType;
+      }
     }
 
     return metrics;
@@ -768,9 +804,10 @@ export const ErrorMonitoringUtils = {
       error instanceof AppError
         ? error
         : new AppError(
-            ErrorCategory.SYSTEM,
             error.message,
+            ErrorCategory.SYSTEM,
             ErrorSeverity.MEDIUM,
+            "CAPTURED_ERROR",
             { originalError: error }
           );
 
@@ -781,7 +818,7 @@ export const ErrorMonitoringUtils = {
   addBreadcrumb(
     message: string,
     category: Breadcrumb["category"] = "info",
-    data?: any
+    data?: Record<string, unknown>
   ): void {
     const monitor = this.getInstance();
     if (!monitor) return;
@@ -816,14 +853,4 @@ export const ErrorMonitoringUtils = {
       },
     });
   },
-};
-
-// Export the monitoring system
-export { ErrorMonitoringSystem };
-export type {
-  ErrorReport,
-  ErrorContext,
-  Breadcrumb,
-  ErrorAggregation,
-  MonitoringConfig,
 };

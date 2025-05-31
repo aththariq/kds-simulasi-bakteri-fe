@@ -23,6 +23,7 @@ export interface UseWebSocketReturn {
 }
 
 interface UseWebSocketOptions {
+  url: string;
   reconnectAttempts?: number;
   reconnectInterval?: number;
   onOpen?: (event: Event) => void;
@@ -32,10 +33,10 @@ interface UseWebSocketOptions {
 }
 
 export const useWebSocket = (
-  url: string,
-  options: UseWebSocketOptions = {}
+  options: UseWebSocketOptions
 ): UseWebSocketReturn => {
   const {
+    url,
     reconnectAttempts = 5,
     reconnectInterval = 3000,
     onOpen,
@@ -50,7 +51,7 @@ export const useWebSocket = (
     useState<ConnectionState>("disconnected");
   const [reconnectCount, setReconnectCount] = useState(0);
 
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const isManualClose = useRef(false);
 
@@ -169,7 +170,7 @@ export const useWebSocket = (
         socketRef.current.close();
       }
     };
-  }, [url]);
+  }, [url, connect]);
 
   // Cleanup on unmount
   useEffect(() => {

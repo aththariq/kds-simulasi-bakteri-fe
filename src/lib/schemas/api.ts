@@ -440,7 +440,7 @@ export const isServerError = (status: number): boolean => {
 export const createErrorResponse = (
   code: string,
   message: string,
-  details?: Record<string, any>,
+  details?: Record<string, unknown>,
   fieldErrors?: Record<string, string[]>
 ): ApiError => {
   return {

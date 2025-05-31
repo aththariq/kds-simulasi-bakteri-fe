@@ -86,6 +86,72 @@ export const SimulationDefaultsSchema = z.object({
   }),
 });
 
+// Type inference for the defaults - need these before defining the defaults
+export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
+export type DisplaySettings = z.infer<typeof DisplaySettingsSchema>;
+export type SimulationDefaults = z.infer<typeof SimulationDefaultsSchema>;
+
+// Default Values - Define these before using them in schemas
+export const DEFAULT_USER_PREFERENCES: UserPreferences = {
+  theme: "system",
+  language: "en",
+  density: "comfortable",
+  animations: "full",
+  auto_save: true,
+  show_tooltips: true,
+  sound_enabled: false,
+  notifications_enabled: true,
+  email_notifications: false,
+  high_contrast: false,
+  reduce_motion: false,
+  screen_reader_support: false,
+};
+
+export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
+  charts: {
+    show_grid: true,
+    show_legend: true,
+    animation_duration: 750,
+    color_scheme: "default",
+    line_thickness: "medium",
+    point_size: "medium",
+  },
+  simulation: {
+    show_bacteria_count: true,
+    show_resistance_percentage: true,
+    show_generation_counter: true,
+    show_performance_metrics: false,
+    update_frequency: "real-time",
+    max_history_points: 1000,
+  },
+  layout: {
+    sidebar_collapsed: false,
+    panel_layout: "horizontal",
+    show_minimap: true,
+    full_screen_charts: false,
+  },
+};
+
+export const DEFAULT_SIMULATION_DEFAULTS: SimulationDefaults = {
+  auto_start: false,
+  save_results: true,
+  max_concurrent_simulations: 3,
+  default_parameters: {
+    population_size: 10000,
+    generations: 100,
+    mutation_rate: 0.001,
+    hgt_rate: 0.01,
+    initial_resistance_frequency: 0.01,
+    antibiotic_concentration: 1.0,
+  },
+  export_settings: {
+    default_format: "csv",
+    include_metadata: true,
+    compress_files: false,
+    auto_download: true,
+  },
+};
+
 // User Profile Schema
 export const UserProfileSchema = z.object({
   user_id: z.string().min(1, "User ID is required").optional(),
@@ -129,9 +195,11 @@ export const UserProfileSchema = z.object({
     })
     .optional(),
   is_verified: z.boolean().default(false),
-  preferences: UserPreferencesSchema.default({}),
-  display_settings: DisplaySettingsSchema.default({}),
-  simulation_defaults: SimulationDefaultsSchema.default({}),
+  preferences: UserPreferencesSchema.default(DEFAULT_USER_PREFERENCES),
+  display_settings: DisplaySettingsSchema.default(DEFAULT_DISPLAY_SETTINGS),
+  simulation_defaults: SimulationDefaultsSchema.default(
+    DEFAULT_SIMULATION_DEFAULTS
+  ),
 });
 
 // Session State Schema
@@ -287,9 +355,6 @@ export type Theme = z.infer<typeof ThemeSchema>;
 export type Language = z.infer<typeof LanguageSchema>;
 export type Density = z.infer<typeof DensitySchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
-export type UserPreferences = z.infer<typeof UserPreferencesSchema>;
-export type DisplaySettings = z.infer<typeof DisplaySettingsSchema>;
-export type SimulationDefaults = z.infer<typeof SimulationDefaultsSchema>;
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 export type SessionState = z.infer<typeof SessionStateSchema>;
 export type UIState = z.infer<typeof UIStateSchema>;
@@ -431,67 +496,6 @@ export const isValidLanguage = (language: unknown): language is Language => {
   } catch {
     return false;
   }
-};
-
-// Default Values
-export const DEFAULT_USER_PREFERENCES: UserPreferences = {
-  theme: "system",
-  language: "en",
-  density: "comfortable",
-  animations: "full",
-  auto_save: true,
-  show_tooltips: true,
-  sound_enabled: false,
-  notifications_enabled: true,
-  email_notifications: false,
-  high_contrast: false,
-  reduce_motion: false,
-  screen_reader_support: false,
-};
-
-export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
-  charts: {
-    show_grid: true,
-    show_legend: true,
-    animation_duration: 750,
-    color_scheme: "default",
-    line_thickness: "medium",
-    point_size: "medium",
-  },
-  simulation: {
-    show_bacteria_count: true,
-    show_resistance_percentage: true,
-    show_generation_counter: true,
-    show_performance_metrics: false,
-    update_frequency: "real-time",
-    max_history_points: 1000,
-  },
-  layout: {
-    sidebar_collapsed: false,
-    panel_layout: "horizontal",
-    show_minimap: true,
-    full_screen_charts: false,
-  },
-};
-
-export const DEFAULT_SIMULATION_DEFAULTS: SimulationDefaults = {
-  auto_start: false,
-  save_results: true,
-  max_concurrent_simulations: 3,
-  default_parameters: {
-    population_size: 10000,
-    generations: 100,
-    mutation_rate: 0.001,
-    hgt_rate: 0.01,
-    initial_resistance_frequency: 0.01,
-    antibiotic_concentration: 1.0,
-  },
-  export_settings: {
-    default_format: "csv",
-    include_metadata: true,
-    compress_files: false,
-    auto_download: true,
-  },
 };
 
 // Helper Functions

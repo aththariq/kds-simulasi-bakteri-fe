@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { Profiler, ProfilerOnRenderCallback } from "react";
-import { getCLS, getFID, getFCP, getLCP, getTTFB, Metric } from "web-vitals";
+import { Profiler, type ProfilerOnRenderCallback } from "react";
+import { onCLS, onINP, onFCP, onLCP, onTTFB, type Metric } from "web-vitals";
 import {
   Card,
   CardContent,
@@ -17,16 +17,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import {
-  AlertTriangle,
   Activity,
+  AlertTriangle,
   BarChart3,
   Clock,
   Cpu,
-  Memory,
+  HardDrive,
   Zap,
 } from "lucide-react";
 
-// Types for performance data
 interface WebVitalsData {
   cls: number | null;
   fid: number | null;
@@ -43,18 +42,17 @@ interface ComponentRenderMetric {
   baseDuration: number;
   startTime: number;
   commitTime: number;
-  interactions: Set<string>;
 }
 
 interface BackendPerformanceData {
   type: string;
   data?: {
     type?: string;
-    metrics?: any;
-    summary?: any;
-    alerts?: any[];
+    metrics?: Record<string, unknown>;
+    summary?: Record<string, unknown>;
+    alerts?: PerformanceAlert[];
     function_name?: string;
-    baseline?: any;
+    baseline?: Record<string, unknown>;
   };
 }
 
@@ -66,6 +64,14 @@ interface PerformanceAlert {
   deviation_percent: number;
   severity: "low" | "medium" | "high" | "critical";
   timestamp: string;
+}
+
+interface BackendMetrics {
+  memory_rss?: number;
+  memory_vms?: number;
+  cpu_percent?: number;
+  thread_count?: number;
+  fd_count?: number;
 }
 
 // Web Vitals thresholds
@@ -91,15 +97,20 @@ const PerformanceMonitor: React.FC = () => {
   const [componentMetrics, setComponentMetrics] = useState<
     ComponentRenderMetric[]
   >([]);
-  const [backendMetrics, setBackendMetrics] = useState<any>(null);
+  const [backendMetrics, setBackendMetrics] = useState<BackendMetrics | null>(
+    null
+  );
   const [performanceAlerts, setPerformanceAlerts] = useState<
     PerformanceAlert[]
   >([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
 
   // WebSocket connection for real-time backend metrics
-  const { socket, isConnected, sendMessage, lastMessage, connectionState } =
-    useWebSocket(`ws://localhost:8000/ws/performance`);
+  const { isConnected, sendMessage, lastMessage } = useWebSocket({
+    url: `ws://localhost:8000/ws/performance`,
+    reconnectAttempts: 5,
+    reconnectInterval: 1000,
+  });
 
   // Web Vitals collection
   useEffect(() => {
@@ -114,11 +125,11 @@ const PerformanceMonitor: React.FC = () => {
     };
 
     // Collect Web Vitals
-    getCLS(handleMetric);
-    getFID(handleMetric);
-    getFCP(handleMetric);
-    getLCP(handleMetric);
-    getTTFB(handleMetric);
+    onCLS(handleMetric);
+    onINP(handleMetric);
+    onFCP(handleMetric);
+    onLCP(handleMetric);
+    onTTFB(handleMetric);
 
     // Performance observer for custom metrics
     if ("PerformanceObserver" in window) {
@@ -131,7 +142,7 @@ const PerformanceMonitor: React.FC = () => {
                 navEntry.domContentLoadedEventEnd -
                 navEntry.domContentLoadedEventStart,
               loadComplete: navEntry.loadEventEnd - navEntry.loadEventStart,
-              totalTime: navEntry.loadEventEnd - navEntry.navigationStart,
+              totalTime: navEntry.loadEventEnd - navEntry.fetchStart,
             });
           }
         }
@@ -154,7 +165,7 @@ const PerformanceMonitor: React.FC = () => {
         if (data.type === "performance_update" && data.data) {
           switch (data.data.type) {
             case "system_metrics":
-              setBackendMetrics(data.data.metrics);
+              setBackendMetrics(data.data.metrics as BackendMetrics);
               break;
             case "performance_summary":
               // Update performance summary
@@ -182,21 +193,22 @@ const PerformanceMonitor: React.FC = () => {
   const onRenderCallback: ProfilerOnRenderCallback = useCallback(
     (
       id: string,
-      phase: "mount" | "update",
+      phase: "mount" | "update" | "nested-update",
       actualDuration: number,
       baseDuration: number,
       startTime: number,
-      commitTime: number,
-      interactions: Set<string>
+      commitTime: number
     ) => {
+      // Only track mount and update phases for our metrics
+      if (phase === "nested-update") return;
+
       const metric: ComponentRenderMetric = {
         id,
-        phase,
+        phase: phase as "mount" | "update",
         actualDuration,
         baseDuration,
         startTime,
         commitTime,
-        interactions,
       };
 
       setComponentMetrics(prev => [...prev.slice(-19), metric]);
@@ -553,7 +565,7 @@ const PerformanceMonitor: React.FC = () => {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
-                      <Memory className="h-5 w-5" />
+                      <HardDrive className="h-5 w-5" />
                       <span>Memory Usage</span>
                     </CardTitle>
                   </CardHeader>

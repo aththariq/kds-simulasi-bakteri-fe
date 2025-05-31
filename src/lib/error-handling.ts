@@ -10,7 +10,7 @@ export interface APIError {
   message: string;
   code?: string;
   status?: number;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   timestamp?: string;
 }
 
@@ -58,16 +58,32 @@ export class AppError extends Error {
     public category: ErrorCategory,
     public severity: ErrorSeverity = ErrorSeverity.MEDIUM,
     public code?: string,
-    public details?: Record<string, any>
+    public details?: Record<string, unknown>
   ) {
     super(message);
     this.name = "AppError";
+  }
+
+  static fromUnknown(
+    error: unknown,
+    context: string,
+    category: ErrorCategory,
+    details?: Record<string, unknown>
+  ): AppError {
+    const message = error instanceof Error ? error.message : String(error);
+    return new AppError(
+      message,
+      category,
+      ErrorSeverity.CRITICAL,
+      undefined,
+      details
+    );
   }
 }
 
 // API Error handling
 export class APIErrorHandler {
-  static async handleResponse(response: Response): Promise<any> {
+  static async handleResponse(response: Response): Promise<unknown> {
     if (!response.ok) {
       const errorData = await this.parseErrorResponse(response);
       throw new AppError(
@@ -106,7 +122,9 @@ export class APIErrorHandler {
     return ErrorSeverity.LOW;
   }
 
-  static handleNetworkError(error: any): NetworkError {
+  static handleNetworkError(
+    error: Error & { name?: string; code?: string; status?: number }
+  ): NetworkError {
     const isNetworkError = !navigator.onLine || error.name === "NetworkError";
     const isTimeout =
       error.name === "AbortError" || error.code === "NETWORK_TIMEOUT";
@@ -143,7 +161,7 @@ export class WebSocketErrorHandler {
     return error;
   }
 
-  handleMessageError(data: any): WebSocketError {
+  handleMessageError(_data: unknown): WebSocketError {
     const error: WebSocketError = {
       type: "message",
       message: "Invalid message received from server",
@@ -184,7 +202,7 @@ export class WebSocketErrorHandler {
     return error;
   }
 
-  private showConnectionError(error: WebSocketError) {
+  private showConnectionError(_error: WebSocketError) {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       notifications.warning({
         title: "Connection Lost",
@@ -229,7 +247,7 @@ export class WebSocketErrorHandler {
 
       this.resetReconnectAttempts();
       return true;
-    } catch (error) {
+    } catch {
       return this.attemptReconnect(connectFunction);
     }
   }
@@ -284,7 +302,7 @@ export class ValidationErrorHandler {
 
 // File Upload Error handling
 export class FileUploadErrorHandler {
-  static handleUploadError(error: any, fileName: string) {
+  static handleUploadError(error: unknown, fileName: string) {
     if (error instanceof AppError) {
       notifications.error({
         title: "Upload Failed",
@@ -332,7 +350,7 @@ export class FileUploadErrorHandler {
 
 // Simulation Error handling
 export class SimulationErrorHandler {
-  static handleSimulationError(error: any, context: string) {
+  static handleSimulationError(error: unknown, context: string) {
     if (error instanceof AppError) {
       notifications.error({
         title: "Simulation Error",
@@ -347,7 +365,6 @@ export class SimulationErrorHandler {
         action: {
           label: "Report Issue",
           onClick: () => {
-            // This could open a feedback form or error reporting system
             console.error("Simulation error:", error);
           },
         },
@@ -357,12 +374,21 @@ export class SimulationErrorHandler {
 
   static handleParameterValidationError(
     parameter: string,
-    value: any,
+    value: unknown,
     constraint: string
   ) {
+    // Create error for internal tracking
+    new AppError(
+      `Parameter "${parameter}" validation failed: ${constraint}`,
+      ErrorCategory.VALIDATION,
+      ErrorSeverity.MEDIUM,
+      "PARAMETER_VALIDATION_FAILED",
+      { parameter, value, constraint }
+    );
+
     notifications.error({
-      title: "Invalid Simulation Parameter",
-      description: `${parameter} value (${value}) ${constraint}`,
+      title: "Parameter Error",
+      description: `Parameter "${parameter}" is invalid: ${constraint}`,
       duration: 5000,
     });
   }
@@ -375,34 +401,63 @@ export class GlobalErrorHandler {
     window.addEventListener("unhandledrejection", event => {
       console.error("Unhandled promise rejection:", event.reason);
 
-      if (event.reason instanceof AppError) {
-        this.handleAppError(event.reason);
-      } else {
-        notifications.error({
-          title: "Unexpected Error",
-          description:
-            "An unexpected error occurred. The development team has been notified.",
-          duration: 6000,
-        });
-      }
+      const error = AppError.fromUnknown(
+        event.reason,
+        "Unhandled promise rejection",
+        ErrorCategory.SYSTEM
+      );
 
+      this.handleAppError(error);
+
+      // Prevent the default browser error handling
       event.preventDefault();
     });
 
-    // Handle global JavaScript errors
+    // Handle global errors
     window.addEventListener("error", event => {
       console.error("Global error:", event.error);
 
-      notifications.error({
-        title: "Application Error",
-        description: "A critical error occurred. Please refresh the page.",
-        duration: 8000,
-        action: {
-          label: "Refresh",
-          onClick: () => window.location.reload(),
-        },
-      });
+      const error = AppError.fromUnknown(
+        event.error,
+        "Global error",
+        ErrorCategory.SYSTEM,
+        {
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+        }
+      );
+
+      this.handleAppError(error);
     });
+
+    // Handle resource loading errors
+    window.addEventListener(
+      "error",
+      event => {
+        if (event.target && event.target !== window) {
+          const target = event.target as HTMLElement;
+          const tagName = target.tagName?.toLowerCase();
+
+          let resourceUrl = "unknown resource";
+          if (
+            target instanceof HTMLImageElement ||
+            target instanceof HTMLScriptElement
+          ) {
+            resourceUrl = target.src;
+          } else if (target instanceof HTMLLinkElement) {
+            resourceUrl = target.href;
+          }
+
+          notifications.warning({
+            title: "Resource Loading Error",
+            description: `Failed to load ${tagName}: ${resourceUrl}`,
+            duration: 5000,
+          });
+        }
+      },
+      true
+    );
 
     // Handle network status changes
     window.addEventListener("online", () => {
@@ -423,35 +478,80 @@ export class GlobalErrorHandler {
   }
 
   static handleAppError(error: AppError) {
-    const severityConfig = {
-      [ErrorSeverity.LOW]: { duration: 4000 },
-      [ErrorSeverity.MEDIUM]: { duration: 6000 },
-      [ErrorSeverity.HIGH]: { duration: 8000 },
-      [ErrorSeverity.CRITICAL]: {
-        duration: 0, // Don't auto-dismiss critical errors
-        action: {
-          label: "Report Issue",
-          onClick: () => console.error("Critical error:", error),
-        },
-      },
-    };
-
-    const config = severityConfig[error.severity];
-
-    notifications.error({
-      title: `${
-        error.category.charAt(0).toUpperCase() + error.category.slice(1)
-      } Error`,
-      description: error.message,
-      ...config,
+    // Log error for debugging
+    console.error("Application Error:", {
+      message: error.message,
+      category: error.category,
+      severity: error.severity,
+      code: error.code,
+      details: error.details,
+      stack: error.stack,
     });
+
+    // Show user notification based on severity
+    switch (error.severity) {
+      case ErrorSeverity.LOW:
+        // Don't show notifications for low severity errors
+        break;
+
+      case ErrorSeverity.MEDIUM:
+        notifications.warning({
+          title: "Warning",
+          description: error.message,
+          duration: 4000,
+        });
+        break;
+
+      case ErrorSeverity.HIGH:
+        notifications.error({
+          title: "Error",
+          description: error.message,
+          duration: 6000,
+        });
+        break;
+
+      case ErrorSeverity.CRITICAL:
+        notifications.error({
+          title: "Critical Error",
+          description: error.message,
+          duration: 0, // Don't auto-dismiss
+          action: {
+            label: "Reload",
+            onClick: () => window.location.reload(),
+          },
+        });
+        break;
+
+      default:
+        notifications.error({
+          title: "Error",
+          description: error.message,
+          duration: 5000,
+        });
+    }
+
+    // Report to error monitoring system if available
+    if (
+      typeof window !== "undefined" &&
+      (
+        window as unknown as {
+          errorMonitoring?: { captureError: (error: AppError) => void };
+        }
+      ).errorMonitoring
+    ) {
+      (
+        window as unknown as {
+          errorMonitoring: { captureError: (error: AppError) => void };
+        }
+      ).errorMonitoring.captureError(error);
+    }
   }
 }
 
 // Utility functions for common error scenarios
 export const errorUtils = {
   // Create standardized error messages
-  createValidationMessage: (field: string, rule: string, value?: any) => {
+  createValidationMessage: (field: string, rule: string, value?: unknown) => {
     const templates = {
       required: `${field} is required`,
       min: `${field} must be at least ${value}`,
@@ -464,16 +564,22 @@ export const errorUtils = {
   },
 
   // Extract error message from various error types
-  extractErrorMessage: (error: any): string => {
+  extractErrorMessage: (error: unknown): string => {
     if (error instanceof AppError) return error.message;
     if (error instanceof ZodError) return "Validation failed";
-    if (error?.message) return error.message;
+    if (
+      error &&
+      typeof error === "object" &&
+      "message" in error &&
+      typeof error.message === "string"
+    )
+      return error.message;
     if (typeof error === "string") return error;
     return "An unexpected error occurred";
   },
 
   // Check if error is retryable
-  isRetryableError: (error: any): boolean => {
+  isRetryableError: (error: unknown): boolean => {
     if (error instanceof AppError) {
       return (
         error.category === ErrorCategory.NETWORK ||
@@ -485,16 +591,16 @@ export const errorUtils = {
 
   // Format error for logging
   formatErrorForLogging: (
-    error: any,
+    error: unknown,
     context?: string
-  ): Record<string, any> => {
+  ): Record<string, unknown> => {
     return {
       message: errorUtils.extractErrorMessage(error),
       context,
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
       url: window.location.href,
-      stack: error?.stack,
+      stack: error instanceof Error ? error.stack : undefined,
       ...(error instanceof AppError && {
         category: error.category,
         severity: error.severity,
@@ -509,12 +615,3 @@ export const errorUtils = {
 if (typeof window !== "undefined") {
   GlobalErrorHandler.setupGlobalHandlers();
 }
-
-export {
-  APIErrorHandler,
-  WebSocketErrorHandler,
-  ValidationErrorHandler,
-  FileUploadErrorHandler,
-  SimulationErrorHandler,
-  GlobalErrorHandler,
-};

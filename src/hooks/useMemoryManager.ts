@@ -55,7 +55,15 @@ const getMemoryMetrics = (): MemoryMetrics | null => {
     return null;
   }
 
-  const memory = (performance as any).memory;
+  const memory = (
+    performance as {
+      memory: {
+        usedJSHeapSize: number;
+        totalJSHeapSize: number;
+        jsHeapSizeLimit: number;
+      };
+    }
+  ).memory;
   return {
     usedJSHeapSize: memory.usedJSHeapSize,
     totalJSHeapSize: memory.totalJSHeapSize,
@@ -94,39 +102,6 @@ export const useMemoryManager = (
   const lastMetricsRef = useRef<MemoryMetrics | null>(null);
 
   /**
-   * Register a resource for automatic cleanup
-   */
-  const registerResource = useCallback(
-    (
-      id: string,
-      cleanup: CleanupFunction,
-      category: string = "default",
-      autoCleanupDelay?: number
-    ) => {
-      const handle: ResourceHandle = {
-        id,
-        cleanup,
-        category,
-        createdAt: Date.now(),
-      };
-
-      resourcesRef.current.set(id, handle);
-
-      // Set up automatic cleanup if specified
-      if (autoCleanupDelay && autoCleanupDelay > 0) {
-        const timeout = setTimeout(() => {
-          cleanupResource(id);
-        }, autoCleanupDelay);
-
-        cleanupTimeoutsRef.current.set(id, timeout);
-      }
-
-      return id;
-    },
-    []
-  );
-
-  /**
    * Unregister and cleanup a specific resource
    */
   const cleanupResource = useCallback(async (id: string): Promise<boolean> => {
@@ -152,6 +127,39 @@ export const useMemoryManager = (
       return false;
     }
   }, []);
+
+  /**
+   * Register a new resource for cleanup tracking
+   */
+  const registerResource = useCallback(
+    (
+      cleanup: CleanupFunction,
+      category: string = "general",
+      autoCleanupDelay?: number
+    ): string => {
+      const id = Math.random().toString(36).substring(2, 15);
+      const handle: ResourceHandle = {
+        id,
+        cleanup,
+        category,
+        createdAt: Date.now(),
+      };
+
+      resourcesRef.current.set(id, handle);
+
+      // Set up auto-cleanup if specified
+      if (autoCleanupDelay && autoCleanupDelay > 0) {
+        const timeout = setTimeout(() => {
+          cleanupResource(id);
+        }, autoCleanupDelay);
+
+        cleanupTimeoutsRef.current.set(id, timeout);
+      }
+
+      return id;
+    },
+    [cleanupResource]
+  );
 
   /**
    * Cleanup all resources in a category
@@ -194,9 +202,12 @@ export const useMemoryManager = (
    * Force garbage collection (if available)
    */
   const forceGC = useCallback(() => {
-    if ("gc" in window && typeof (window as any).gc === "function") {
+    if (
+      "gc" in window &&
+      typeof (window as { gc?: () => void }).gc === "function"
+    ) {
       try {
-        (window as any).gc();
+        (window as { gc: () => void }).gc();
         return true;
       } catch (error) {
         console.warn("Failed to force garbage collection:", error);
@@ -370,12 +381,14 @@ export const useMemoryManager = (
 
   // Cleanup all resources on unmount
   useEffect(() => {
+    const currentTimeouts = cleanupTimeoutsRef.current;
+
     return () => {
       cleanupAll();
 
-      // Clear all timeouts
-      cleanupTimeoutsRef.current.forEach(timeout => clearTimeout(timeout));
-      cleanupTimeoutsRef.current.clear();
+      // Clear all timeouts using the captured reference
+      currentTimeouts.forEach(timeout => clearTimeout(timeout));
+      currentTimeouts.clear();
     };
   }, [cleanupAll]);
 
@@ -433,7 +446,6 @@ export const useWebSocketResource = (
     }
 
     resourceIdRef.current = registerResource(
-      `websocket-${Date.now()}`,
       () => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
@@ -484,22 +496,18 @@ export const useCanvasResource = (
         contextRef.current = context;
 
         // Register cleanup
-        resourceIdRef.current = registerResource(
-          `canvas-${Date.now()}`,
-          () => {
-            if (context && canvasRef.current) {
-              // Clear canvas
-              context.clearRect(
-                0,
-                0,
-                canvasRef.current.width,
-                canvasRef.current.height
-              );
-              contextRef.current = null;
-            }
-          },
-          "canvas"
-        );
+        resourceIdRef.current = registerResource(() => {
+          if (context && canvasRef.current) {
+            // Clear canvas
+            context.clearRect(
+              0,
+              0,
+              canvasRef.current.width,
+              canvasRef.current.height
+            );
+            contextRef.current = null;
+          }
+        }, "canvas");
       }
 
       return contextRef.current;

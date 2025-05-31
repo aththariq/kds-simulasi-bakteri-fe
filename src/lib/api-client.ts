@@ -4,14 +4,10 @@ import {
   AppError,
   ErrorCategory,
   ErrorSeverity,
-  errorUtils,
 } from "./error-handling";
 import {
-  apiRequestSchema,
-  apiResponseSchema,
-  healthCheckResponseSchema,
-  simulationStartRequestSchema,
-  simulationStartResponseSchema,
+  HealthCheckSchema as healthCheckResponseSchema,
+  SimulationResponseSchema as simulationStartResponseSchema,
 } from "./schemas/api";
 import { notifications } from "@/components/ui/notification-system";
 
@@ -35,7 +31,7 @@ const DEFAULT_CONFIG: APIClientConfig = {
 // Request options interface
 interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-  body?: any;
+  body?: unknown;
   headers?: Record<string, string>;
   timeout?: number;
   retryAttempts?: number;
@@ -45,7 +41,7 @@ interface RequestOptions {
 }
 
 // Response wrapper interface
-interface APIResponse<T = any> {
+interface APIResponse<T = unknown> {
   data: T;
   status: number;
   headers: Headers;
@@ -60,7 +56,7 @@ export class APIClient {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  async request<T = any>(
+  async request<T = unknown>(
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<APIResponse<T>> {
@@ -88,8 +84,12 @@ export class APIClient {
           ...headers,
         },
         signal: abortController.signal,
-        ...(body && { body: JSON.stringify(body) }),
       };
+
+      // Add body if provided
+      if (body) {
+        requestConfig.body = JSON.stringify(body);
+      }
 
       // Validate request if schema is provided
       if (body && schema) {
@@ -113,7 +113,7 @@ export class APIClient {
         abortController.abort();
       }, timeout);
 
-      let lastError: any;
+      let lastError: unknown;
 
       for (let attempt = 0; attempt <= retryAttempts; attempt++) {
         try {
@@ -131,7 +131,7 @@ export class APIClient {
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            const errorData = await APIErrorHandler.handleResponse(response);
+            await APIErrorHandler.handleResponse(response);
             // This will throw an AppError, which will be caught below
           }
 
@@ -141,7 +141,7 @@ export class APIClient {
           if (contentType && contentType.includes("application/json")) {
             data = await response.json();
           } else {
-            data = (await response.text()) as any;
+            data = (await response.text()) as T;
           }
 
           // Validate response if schema is provided and validation is enabled
@@ -188,9 +188,18 @@ export class APIClient {
           }
 
           // Handle network errors for retry logic
-          if (!navigator.onLine || error.name === "AbortError") {
-            const networkError = APIErrorHandler.handleNetworkError(error);
-            if (!networkError.retryable) {
+          if (
+            !navigator.onLine ||
+            (error instanceof Error && error.name === "AbortError")
+          ) {
+            // Only call handleNetworkError with proper Error instances
+            if (error instanceof Error) {
+              const networkError = APIErrorHandler.handleNetworkError(error);
+              if (!networkError.retryable) {
+                break;
+              }
+            } else {
+              // For non-Error objects (like offline state), still break retry loop
               break;
             }
           }
@@ -218,11 +227,10 @@ export class APIClient {
     }
   }
 
-  private handleRequestError(error: any, endpoint: string, method: string) {
+  private handleRequestError(error: unknown, endpoint: string, method: string) {
     const context = `${method} ${endpoint}`;
-    const logData = errorUtils.formatErrorForLogging(error, context);
 
-    console.error("API Request failed:", logData);
+    console.error(`API Request failed (${context}):`, error);
 
     if (error instanceof AppError) {
       // Error notifications are handled by the global error handler
@@ -244,7 +252,7 @@ export class APIClient {
     }
 
     // Handle timeout errors
-    if (error.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       notifications.error({
         title: "Request Timeout",
         description: "The request took too long to complete. Please try again.",
@@ -262,38 +270,38 @@ export class APIClient {
   }
 
   // Convenience methods for common HTTP verbs
-  async get<T = any>(
+  async get<T = unknown>(
     endpoint: string,
     options: Omit<RequestOptions, "method"> = {}
   ): Promise<APIResponse<T>> {
     return this.request<T>(endpoint, { ...options, method: "GET" });
   }
 
-  async post<T = any>(
+  async post<T = unknown>(
     endpoint: string,
-    body?: any,
+    body?: unknown,
     options: Omit<RequestOptions, "method" | "body"> = {}
   ): Promise<APIResponse<T>> {
     return this.request<T>(endpoint, { ...options, method: "POST", body });
   }
 
-  async put<T = any>(
+  async put<T = unknown>(
     endpoint: string,
-    body?: any,
+    body?: unknown,
     options: Omit<RequestOptions, "method" | "body"> = {}
   ): Promise<APIResponse<T>> {
     return this.request<T>(endpoint, { ...options, method: "PUT", body });
   }
 
-  async patch<T = any>(
+  async patch<T = unknown>(
     endpoint: string,
-    body?: any,
+    body?: unknown,
     options: Omit<RequestOptions, "method" | "body"> = {}
   ): Promise<APIResponse<T>> {
     return this.request<T>(endpoint, { ...options, method: "PATCH", body });
   }
 
-  async delete<T = any>(
+  async delete<T = unknown>(
     endpoint: string,
     options: Omit<RequestOptions, "method"> = {}
   ): Promise<APIResponse<T>> {
@@ -351,7 +359,7 @@ export class APIClient {
     file: File,
     options: {
       onProgress?: (progress: number) => void;
-      additionalData?: Record<string, any>;
+      additionalData?: Record<string, unknown>;
     } = {}
   ): Promise<APIResponse> {
     const { onProgress, additionalData = {} } = options;
@@ -434,7 +442,7 @@ export class APIClient {
 
 // Simulation-specific API methods
 export class SimulationAPI extends APIClient {
-  async startSimulation(parameters: any) {
+  async startSimulation(parameters: Record<string, unknown>) {
     try {
       const response = await this.post("/simulation/start", parameters, {
         schema: simulationStartResponseSchema,
