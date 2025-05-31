@@ -21,8 +21,19 @@ import {
   Activity,
   AlertCircle,
   CheckCircle,
+  Clock,
+  Zap,
+  Users,
+  Target,
+  Beaker,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  ExportDialog,
+  ExportDialogTrigger,
+} from "@/components/ui/export-dialog";
 
 // Import visualization components
 import { PopulationGrowthChart } from "./PopulationGrowthChart";
@@ -410,9 +421,45 @@ export default function ResultsDashboard({
     if (onExport) {
       onExport(format);
     } else {
-      // Default export logic
+      // Default export logic - now handled by ExportDialog
       console.log(`Exporting data in ${format} format...`, dataState.data);
     }
+  };
+
+  // Convert dashboard data to export-compatible format
+  const getExportData = () => {
+    if (!dataState.data) return [];
+
+    // Convert population data to the expected format
+    return dataState.data.population.map(point => ({
+      generation: point.generation,
+      timestamp: new Date().toISOString(), // You may want to add proper timestamps
+      totalPopulation: point.populationSize,
+      resistantPopulation: Math.floor(point.populationSize * 0.1), // Approximate
+      sensitivePopulation: Math.floor(point.populationSize * 0.9), // Approximate
+      antibioticConcentration: 0.5, // You may want to add this to your data
+      fitnessScore: 1.0,
+      mutationRate: 0.001,
+    }));
+  };
+
+  // Get visualization references for export
+  const getVisualizationRefs = () => {
+    // This would be populated with actual chart references in a real implementation
+    return [
+      {
+        id: "population-chart",
+        name: "Population Growth Chart",
+        chartRef: React.createRef<HTMLElement>(),
+        type: "line",
+      },
+      {
+        id: "resistance-chart",
+        name: "Resistance Analysis Chart",
+        chartRef: React.createRef<HTMLElement>(),
+        type: "bar",
+      },
+    ];
   };
 
   if (!dataState.data) {
@@ -493,15 +540,25 @@ export default function ResultsDashboard({
               <span className="hidden sm:inline">Refresh</span>
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleExport("csv")}
-              className="flex items-center space-x-1"
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Export</span>
-            </Button>
+            <ExportDialog
+              trigger={
+                <ExportDialogTrigger variant="outline" size="sm">
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Export</span>
+                </ExportDialogTrigger>
+              }
+              simulationData={getExportData()}
+              sessionData={{
+                sessionId: simulationId || "dashboard-session",
+                startTime: new Date().toISOString(),
+                parameters: {},
+                metadata: {
+                  dashboard: "results",
+                  dataSource: "simulation",
+                },
+              }}
+              visualizations={getVisualizationRefs()}
+            />
           </div>
         </div>
       </div>

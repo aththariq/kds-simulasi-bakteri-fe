@@ -9,6 +9,7 @@ import {
   CheckCircle,
   Clock,
   Activity,
+  Download,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -21,6 +22,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  ExportDialog,
+  ExportDialogTrigger,
+} from "@/components/ui/export-dialog";
 
 // Types for simulation state management
 interface SimulationState {
@@ -42,6 +47,12 @@ interface SimulationProgressTrackerProps {
   onPause: () => void;
   onCancel: () => void;
   disabled?: boolean;
+
+  // Optional data for export functionality
+  simulationData?: any[];
+  sessionData?: any;
+  parameters?: any;
+  visualizations?: any[];
 }
 
 export default function SimulationProgressTracker({
@@ -50,6 +61,10 @@ export default function SimulationProgressTracker({
   onPause,
   onCancel,
   disabled = false,
+  simulationData,
+  sessionData,
+  parameters,
+  visualizations,
 }: SimulationProgressTrackerProps) {
   // Format time helper function
   const formatTime = (seconds: number): string => {
@@ -102,17 +117,37 @@ export default function SimulationProgressTracker({
   // Get control buttons based on current status
   const renderControlButtons = () => {
     const { status } = simulationState;
+    const hasExportData =
+      (simulationData && simulationData.length > 0) ||
+      parameters ||
+      (visualizations && visualizations.length > 0);
 
     if (status === "idle" || status === "cancelled" || status === "error") {
       return (
-        <Button
-          onClick={onStart}
-          disabled={disabled}
-          className="w-full sm:w-auto"
-        >
-          <Play className="h-4 w-4 mr-2" />
-          Start Simulation
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            onClick={onStart}
+            disabled={disabled}
+            className="w-full sm:w-auto"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Start Simulation
+          </Button>
+          {hasExportData && (
+            <ExportDialog
+              trigger={
+                <ExportDialogTrigger variant="outline" size="default">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Data
+                </ExportDialogTrigger>
+              }
+              simulationData={simulationData}
+              sessionData={sessionData}
+              parameters={parameters}
+              visualizations={visualizations}
+            />
+          )}
+        </div>
       );
     }
 
@@ -142,20 +177,48 @@ export default function SimulationProgressTracker({
             <Square className="h-4 w-4 mr-2" />
             Cancel
           </Button>
+          {hasExportData && (
+            <ExportDialog
+              trigger={
+                <ExportDialogTrigger variant="outline" size="default">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </ExportDialogTrigger>
+              }
+              simulationData={simulationData}
+              sessionData={sessionData}
+              parameters={parameters}
+              visualizations={visualizations}
+            />
+          )}
         </div>
       );
     }
 
     if (status === "completed") {
       return (
-        <Button
-          onClick={onStart}
-          disabled={disabled}
-          className="w-full sm:w-auto"
-        >
-          <Play className="h-4 w-4 mr-2" />
-          Run Again
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            onClick={onStart}
+            disabled={disabled}
+            className="w-full sm:w-auto"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Run Again
+          </Button>
+          <ExportDialog
+            trigger={
+              <ExportDialogTrigger variant="default" size="default">
+                <Download className="h-4 w-4 mr-2" />
+                Export Results
+              </ExportDialogTrigger>
+            }
+            simulationData={simulationData}
+            sessionData={sessionData}
+            parameters={parameters}
+            visualizations={visualizations}
+          />
+        </div>
       );
     }
 

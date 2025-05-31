@@ -10,8 +10,17 @@ export * from "./api";
 // Re-export all user schemas
 export * from "./user";
 
+// Re-export session schemas
+export * from "./session";
+
 // Re-export existing validation schemas
 export * from "../validation";
+
+// Re-export export service types
+export * from "../export-service";
+
+// Re-export parameter utilities
+export * from "../parameter-export-utils";
 
 // Common validation utilities
 
