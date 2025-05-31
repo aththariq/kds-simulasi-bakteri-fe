@@ -45,16 +45,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import {
   Tooltip,
   TooltipContent,
@@ -142,7 +133,6 @@ interface SessionHistoryTableProps {
   loading?: boolean;
   error?: string | null;
   filters?: SessionFilters;
-  onFiltersChange?: (filters: SessionFilters) => void;
   onSessionSelect?: (session: SessionListItem) => void;
   onSessionAction?: (action: string, session: SessionListItem) => void;
   onBulkAction?: (action: string, sessions: SessionListItem[]) => void;
@@ -257,7 +247,7 @@ const defaultColumns: SessionTableColumn[] = [
       <div className="text-right">
         <div className="font-medium">
           {session.storage_size > 0
-            ? formatNumber(session.storage_size, "bytes")
+            ? formatNumber(session.storage_size, { unit: " bytes" })
             : "—"}
         </div>
         <div className="text-xs text-muted-foreground">Size</div>
@@ -367,7 +357,6 @@ export const SessionHistoryTable: React.FC<SessionHistoryTableProps> = ({
   loading = false,
   error = null,
   filters = {},
-  onFiltersChange,
   onSessionSelect,
   onSessionAction,
   onBulkAction,
@@ -550,16 +539,6 @@ export const SessionHistoryTable: React.FC<SessionHistoryTableProps> = ({
       setCurrentPage(Math.max(1, Math.min(page, totalPages)));
     },
     [totalPages]
-  );
-
-  const handleFiltersChange = useCallback(
-    (newFilters: Partial<SessionFilters>) => {
-      const updatedFilters = { ...filters, ...newFilters };
-      if (onFiltersChange) {
-        onFiltersChange(updatedFilters);
-      }
-    },
-    [filters, onFiltersChange]
   );
 
   // Reset page when filters change

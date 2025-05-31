@@ -275,6 +275,7 @@ export const SessionExportSchema = z.object({
       encryption: z.boolean().default(false),
     })
     .default({}),
+  checksum: z.string().optional(),
 });
 
 export type SessionExport = z.infer<typeof SessionExportSchema>;

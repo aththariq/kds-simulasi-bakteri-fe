@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -34,6 +34,8 @@ import {
   ExportDialog,
   ExportDialogTrigger,
 } from "@/components/ui/export-dialog";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 
 // Import visualization components
 import { PopulationGrowthChart } from "./PopulationGrowthChart";
@@ -450,13 +452,15 @@ export default function ResultsDashboard({
       {
         id: "population-chart",
         name: "Population Growth Chart",
-        chartRef: React.createRef<HTMLElement>(),
+        chartRef:
+          React.createRef<HTMLElement>() as React.RefObject<HTMLElement>,
         type: "line",
       },
       {
         id: "resistance-chart",
         name: "Resistance Analysis Chart",
-        chartRef: React.createRef<HTMLElement>(),
+        chartRef:
+          React.createRef<HTMLElement>() as React.RefObject<HTMLElement>,
         type: "bar",
       },
     ];
@@ -548,15 +552,7 @@ export default function ResultsDashboard({
                 </ExportDialogTrigger>
               }
               simulationData={getExportData()}
-              sessionData={{
-                sessionId: simulationId || "dashboard-session",
-                startTime: new Date().toISOString(),
-                parameters: {},
-                metadata: {
-                  dashboard: "results",
-                  dataSource: "simulation",
-                },
-              }}
+              sessionData={undefined}
               visualizations={getVisualizationRefs()}
             />
           </div>
@@ -1169,7 +1165,10 @@ const SimpleGridVisualization = ({
     const cells = [];
 
     // Get container dimensions for responsive cell sizing
-    const containerSize = Math.min(window.innerWidth - 64, 600); // Max 600px, min viewport - padding
+    const containerSize = Math.min(
+      typeof window !== "undefined" ? window.innerWidth - 64 : 600,
+      600
+    ); // Max 600px, min viewport - padding
     const cellSize = Math.floor(containerSize / gridSize);
 
     for (let x = 0; x < gridSize; x++) {

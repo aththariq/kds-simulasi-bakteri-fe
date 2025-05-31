@@ -4,16 +4,12 @@ import React, { useState, useCallback, useEffect } from "react";
 import {
   Download,
   FileText,
-  Image,
+  FileImage,
   Settings,
   Archive,
   CheckCircle,
   AlertCircle,
   Loader2,
-  FileJson,
-  FileSpreadsheet,
-  FileImage,
-  Calendar,
   Database,
   PieChart,
 } from "lucide-react";
@@ -40,7 +36,6 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
@@ -54,13 +49,12 @@ import {
   ParameterExportFormat,
   ExportFormat,
 } from "@/lib/export-service";
-import { VisualizationExportService } from "@/lib/visualization-export";
 import {
-  ParameterExportUtils,
-  ParameterPreset,
-} from "@/lib/parameter-export-utils";
+  VisualizationExportService,
+  VisualizationExportOptions,
+} from "@/lib/visualization-export";
 import { PopulationDataPoint } from "@/components/visualization/PopulationChart";
-import { Session } from "@/lib/session-recovery";
+import { Session } from "@/types/session";
 import { SimulationParameters } from "@/lib/validation";
 
 // Export item interface for bulk export
@@ -179,10 +173,13 @@ export function ExportDialog({
   const [visualizationOptions, setVisualizationOptions] =
     useState<VisualizationExportOptions>({
       format: "png",
-      width: 1920,
-      height: 1080,
-      backgroundColor: "white",
-      quality: 0.95,
+      quality: {
+        width: 1920,
+        height: 1080,
+        scale: 2,
+        backgroundColor: "#ffffff",
+        pixelRatio: 2,
+      },
       filename: `charts-${new Date().toISOString().split("T")[0]}.png`,
     });
 
@@ -229,7 +226,7 @@ export function ExportDialog({
       });
     }
 
-    visualizations.forEach((viz, index) => {
+    visualizations.forEach(viz => {
       items.push({
         id: `visualization-${viz.id}`,
         type: "visualization",
@@ -289,10 +286,24 @@ export function ExportDialog({
           return await DataExportService.exportSimulationData(data, options);
 
         case "visualization":
-          return await VisualizationExportService.exportVisualization(
-            data.chartRef.current,
-            options
-          );
+          const vizResult =
+            await VisualizationExportService.exportVisualization(
+              data.chartRef.current,
+              options
+            );
+
+          // Convert VisualizationExportResult to ExportResult
+          return {
+            success: vizResult.success,
+            filename: vizResult.filename,
+            fileSize: vizResult.fileSize,
+            downloadUrl: vizResult.downloadUrl,
+            error: vizResult.error,
+            metadata: {
+              recordsExported: 1, // One visualization exported
+              exportTime: vizResult.metadata?.exportTime || 0,
+            },
+          };
 
         case "parameters":
           return DataExportService.exportParameterSet(data, options);
@@ -740,11 +751,17 @@ export function ExportDialog({
                     <div>
                       <Label htmlFor="viz-quality">Quality</Label>
                       <Select
-                        value={visualizationOptions.quality?.toString()}
+                        value={
+                          visualizationOptions.quality?.quality?.toString() ||
+                          "0.95"
+                        }
                         onValueChange={value =>
                           setVisualizationOptions(prev => ({
                             ...prev,
-                            quality: parseFloat(value),
+                            quality: {
+                              ...prev.quality,
+                              quality: parseFloat(value),
+                            },
                           }))
                         }
                       >
@@ -767,11 +784,14 @@ export function ExportDialog({
                       <Input
                         id="viz-width"
                         type="number"
-                        value={visualizationOptions.width}
+                        value={visualizationOptions.quality?.width}
                         onChange={e =>
                           setVisualizationOptions(prev => ({
                             ...prev,
-                            width: parseInt(e.target.value) || 1920,
+                            quality: {
+                              ...prev.quality,
+                              width: parseInt(e.target.value) || 1920,
+                            },
                           }))
                         }
                       />
@@ -782,11 +802,14 @@ export function ExportDialog({
                       <Input
                         id="viz-height"
                         type="number"
-                        value={visualizationOptions.height}
+                        value={visualizationOptions.quality?.height}
                         onChange={e =>
                           setVisualizationOptions(prev => ({
                             ...prev,
-                            height: parseInt(e.target.value) || 1080,
+                            quality: {
+                              ...prev.quality,
+                              height: parseInt(e.target.value) || 1080,
+                            },
                           }))
                         }
                       />
@@ -807,7 +830,7 @@ export function ExportDialog({
                       {exportProgress.isExporting ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
-                        <Image className="h-4 w-4 mr-2" />
+                        <FileImage className="h-4 w-4 mr-2" />
                       )}
                       Export Charts
                     </Button>

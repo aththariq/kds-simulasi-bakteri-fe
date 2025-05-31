@@ -27,6 +27,48 @@ import {
   ExportDialogTrigger,
 } from "@/components/ui/export-dialog";
 
+// Define proper types for simulation data
+interface SimulationDataPoint {
+  generation: number;
+  totalPopulation: number;
+  resistantPopulation: number;
+  sensitivePopulation: number;
+  antibioticConcentration: number;
+  timestamp?: string;
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+interface SessionData {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  status: string;
+  metadata?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+  simulations?: unknown[];
+  performance?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+  checkpoints?: unknown[];
+}
+
+interface SimulationParameters {
+  populationSize: number;
+  generations: number;
+  mutationRate: number;
+  hgtRate: number;
+  initialResistanceFrequency: number;
+  antibioticConcentration: number;
+  [key: string]: number | string | boolean | object; // Allow additional parameters
+}
+
+interface VisualizationData {
+  type: string;
+  title: string;
+  data: unknown;
+  config?: Record<string, unknown>;
+}
+
 // Types for simulation state management
 interface SimulationState {
   status: "idle" | "running" | "paused" | "completed" | "error" | "cancelled";
@@ -49,10 +91,10 @@ interface SimulationProgressTrackerProps {
   disabled?: boolean;
 
   // Optional data for export functionality
-  simulationData?: any[];
-  sessionData?: any;
-  parameters?: any;
-  visualizations?: any[];
+  simulationData?: SimulationDataPoint[];
+  sessionData?: SessionData;
+  parameters?: SimulationParameters;
+  visualizations?: VisualizationData[];
 }
 
 export default function SimulationProgressTracker({

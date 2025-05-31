@@ -483,6 +483,11 @@ export class SessionManager {
     return await this.persistenceService.getAllSessions();
   }
 
+  // Delete session
+  async deleteSession(sessionId: string): Promise<SessionOperationResult> {
+    return await this.persistenceService.deleteSession(sessionId);
+  }
+
   // Create recovery point
   async createRecoveryPoint(): Promise<SessionOperationResult> {
     if (!this.currentSession) {
@@ -580,7 +585,7 @@ export const useSessionManager = (
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const managerRef = useRef<SessionManager>();
+  const managerRef = useRef<SessionManager>(null as any);
 
   // Initialize session manager
   useEffect(() => {
@@ -729,7 +734,7 @@ export const useSessionManager = (
   const deleteSession = useCallback(
     (sessionId: string) => {
       return handleOperation(
-        () => managerRef.current!.persistenceService.deleteSession(sessionId),
+        () => managerRef.current!.deleteSession(sessionId),
         "Deleting session..."
       );
     },

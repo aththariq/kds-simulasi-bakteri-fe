@@ -303,7 +303,7 @@ export interface SessionTableColumn {
 export interface SessionAction {
   id: string;
   label: string;
-  icon?: React.ComponentType;
+  icon?: React.ComponentType<{ className?: string }>;
   onClick: (session: SessionListItem) => void;
   disabled?: (session: SessionListItem) => boolean;
   variant?:

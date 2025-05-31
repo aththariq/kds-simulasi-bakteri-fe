@@ -153,7 +153,11 @@ export class ErrorMonitoringSystem {
 
   // Core error reporting
   captureError(error: AppError, context: ErrorContext = {}): string {
-    if (!this.config.enabled || !this.shouldSample()) {
+    if (
+      !this.config.enabled ||
+      !this.shouldSample() ||
+      typeof window === "undefined"
+    ) {
       return "";
     }
 
@@ -629,6 +633,19 @@ export class ErrorMonitoringSystem {
   }
 
   private getBrowserInfo(): BrowserInfo {
+    if (typeof window === "undefined") {
+      return {
+        userAgent: "SSR",
+        language: "en",
+        platform: "server",
+        cookieEnabled: false,
+        onLine: false,
+        viewport: { width: 0, height: 0 },
+        screen: { width: 0, height: 0 },
+        timezone: "UTC",
+      };
+    }
+
     return {
       userAgent: navigator.userAgent,
       language: navigator.language,
@@ -648,6 +665,10 @@ export class ErrorMonitoringSystem {
   }
 
   private getPerformanceMetrics(): PerformanceMetrics {
+    if (typeof window === "undefined") {
+      return {};
+    }
+
     const metrics: PerformanceMetrics = {};
 
     if ("memory" in performance) {
@@ -667,6 +688,8 @@ export class ErrorMonitoringSystem {
   }
 
   private getBrowserName(): string {
+    if (typeof window === "undefined") return "SSR";
+
     const userAgent = navigator.userAgent;
     if (userAgent.includes("Chrome")) return "Chrome";
     if (userAgent.includes("Firefox")) return "Firefox";
@@ -676,6 +699,8 @@ export class ErrorMonitoringSystem {
   }
 
   private getOSName(): string {
+    if (typeof window === "undefined") return "Server";
+
     const platform = navigator.platform;
     if (platform.includes("Win")) return "Windows";
     if (platform.includes("Mac")) return "macOS";

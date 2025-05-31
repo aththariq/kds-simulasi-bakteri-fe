@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   Card,
   CardContent,
@@ -8,9 +9,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import SimulationParametersForm from "@/components/simulation/SimulationParametersForm";
-import SimulationController from "@/components/simulation/SimulationController";
-import ResultsDashboard from "@/components/visualization/ResultsDashboard";
+
+// Dynamic imports to prevent SSR issues with browser API access
+const SimulationParametersForm = dynamic(
+  () => import("@/components/simulation/SimulationParametersForm"),
+  { ssr: false }
+);
+const SimulationController = dynamic(
+  () => import("@/components/simulation/SimulationController"),
+  { ssr: false }
+);
+const ResultsDashboard = dynamic(
+  () => import("@/components/visualization/ResultsDashboard"),
+  { ssr: false }
+);
 
 export default function Home() {
   return (

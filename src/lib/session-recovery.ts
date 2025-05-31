@@ -866,7 +866,7 @@ export const useSessionRecovery = (): UseSessionRecoveryReturn => {
   >([]);
   const [error, setError] = useState<string | null>(null);
 
-  const recoveryServiceRef = useRef<SessionRecoveryService>();
+  const recoveryServiceRef = useRef<SessionRecoveryService>(null as any);
 
   // Initialize recovery service
   useEffect(() => {

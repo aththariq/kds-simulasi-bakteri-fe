@@ -22,6 +22,9 @@ export * from "../export-service";
 // Re-export parameter utilities
 export * from "../parameter-export-utils";
 
+// Re-export resistance analysis utilities
+export * from "../resistance-analysis";
+
 // Common validation utilities
 
 // Generic validation result type

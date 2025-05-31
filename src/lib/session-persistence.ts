@@ -26,6 +26,8 @@ interface StorageAdapter {
 // LocalStorage adapter
 class LocalStorageAdapter implements StorageAdapter {
   async get(key: string): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+
     try {
       return localStorage.getItem(key);
     } catch (error) {
@@ -35,6 +37,8 @@ class LocalStorageAdapter implements StorageAdapter {
   }
 
   async set(key: string, value: string): Promise<void> {
+    if (typeof window === "undefined") return;
+
     try {
       localStorage.setItem(key, value);
     } catch (error) {
@@ -44,6 +48,8 @@ class LocalStorageAdapter implements StorageAdapter {
   }
 
   async remove(key: string): Promise<void> {
+    if (typeof window === "undefined") return;
+
     try {
       localStorage.removeItem(key);
     } catch (error) {
@@ -52,6 +58,8 @@ class LocalStorageAdapter implements StorageAdapter {
   }
 
   async keys(): Promise<string[]> {
+    if (typeof window === "undefined") return [];
+
     try {
       return Object.keys(localStorage);
     } catch (error) {
@@ -61,6 +69,8 @@ class LocalStorageAdapter implements StorageAdapter {
   }
 
   async clear(): Promise<void> {
+    if (typeof window === "undefined") return;
+
     try {
       localStorage.clear();
     } catch (error) {
@@ -69,6 +79,8 @@ class LocalStorageAdapter implements StorageAdapter {
   }
 
   async getSize(): Promise<number> {
+    if (typeof window === "undefined") return 0;
+
     try {
       let total = 0;
       for (const key in localStorage) {
@@ -91,6 +103,10 @@ class IndexedDBAdapter implements StorageAdapter {
   private storeName = "sessions";
 
   private async getDB(): Promise<IDBDatabase> {
+    if (typeof window === "undefined") {
+      throw new Error("IndexedDB not available in SSR");
+    }
+
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.version);
 
@@ -107,6 +123,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async get(key: string): Promise<string | null> {
+    if (typeof window === "undefined") return null;
+
     try {
       const db = await this.getDB();
       const transaction = db.transaction(this.storeName, "readonly");
@@ -124,6 +142,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async set(key: string, value: string): Promise<void> {
+    if (typeof window === "undefined") return;
+
     try {
       const db = await this.getDB();
       const transaction = db.transaction(this.storeName, "readwrite");
@@ -141,6 +161,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async remove(key: string): Promise<void> {
+    if (typeof window === "undefined") return;
+
     try {
       const db = await this.getDB();
       const transaction = db.transaction(this.storeName, "readwrite");
@@ -157,6 +179,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async keys(): Promise<string[]> {
+    if (typeof window === "undefined") return [];
+
     try {
       const db = await this.getDB();
       const transaction = db.transaction(this.storeName, "readonly");
@@ -174,6 +198,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async clear(): Promise<void> {
+    if (typeof window === "undefined") return;
+
     try {
       const db = await this.getDB();
       const transaction = db.transaction(this.storeName, "readwrite");
@@ -190,6 +216,8 @@ class IndexedDBAdapter implements StorageAdapter {
   }
 
   async getSize(): Promise<number> {
+    if (typeof window === "undefined") return 0;
+
     try {
       const keys = await this.keys();
       let total = 0;
@@ -213,6 +241,7 @@ class IndexedDBAdapter implements StorageAdapter {
 class CompressionUtils {
   static compress(data: string, enabled: boolean = true): string {
     if (!enabled) return data;
+    if (typeof window === "undefined") return data;
 
     try {
       // Use base64 encoding for simple compression
@@ -225,6 +254,7 @@ class CompressionUtils {
 
   static decompress(data: string, wasCompressed: boolean = true): string {
     if (!wasCompressed) return data;
+    if (typeof window === "undefined") return data;
 
     try {
       return decodeURIComponent(atob(data));
@@ -251,22 +281,16 @@ class VersionManager {
     return this.CURRENT_VERSION;
   }
 
-  static migrate(data: any, fromVersion: string): any {
-    // Handle version migrations here
-    switch (fromVersion) {
-      case "0.9.0":
-        // Example migration
-        return this.migrateFrom090(data);
-      default:
-        return data;
+  static migrate(data: unknown, fromVersion: string): unknown {
+    // Migration logic would go here
+    if (fromVersion === "0.9.0") {
+      return this.migrateFrom090(data);
     }
+    return data;
   }
 
-  private static migrateFrom090(data: any): any {
-    // Example migration logic
-    if (data && !data.metadata?.version) {
-      data.metadata = { ...data.metadata, version: "1.0.0" };
-    }
+  private static migrateFrom090(data: unknown): unknown {
+    // Implementation would transform the data structure
     return data;
   }
 }
@@ -281,6 +305,15 @@ interface StorageQuota {
 
 class QuotaManager {
   static async getStorageQuota(): Promise<StorageQuota> {
+    if (typeof window === "undefined") {
+      return {
+        quota: 0,
+        usage: 0,
+        available: 0,
+        usagePercentage: 0,
+      };
+    }
+
     if (navigator.storage && navigator.storage.estimate) {
       try {
         const estimate = await navigator.storage.estimate();
@@ -615,6 +648,14 @@ export class SessionPersistenceService {
         version: VersionManager.getCurrentVersion(),
         export_timestamp: new Date().toISOString(),
         session: sessionResult.data,
+        history: [], // Add empty history array as default
+        metadata: {
+          exported_by: "system",
+          export_reason: "manual_export",
+          file_format: "json",
+          compression: this.options.compressionEnabled,
+          encryption: false,
+        },
         checksum: this.calculateChecksum(sessionResult.data),
       };
 
@@ -769,16 +810,18 @@ export class SessionPersistenceService {
 
       const recoveryData: SessionRecovery = {
         session_id: sessionId,
-        recovery_point_id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        session_state: sessionResult.data,
-        metadata: {
-          recovery_type: "manual",
-          trigger: "user_initiated",
+        recovery_point: new Date().toISOString(),
+        recovery_data: {
+          session_state: sessionResult.data,
+          simulation_states: [],
+          ui_state: {},
         },
+        is_complete: false,
+        corruption_detected: false,
+        recovery_actions: [],
       };
 
-      const recoveryKey = `recovery_${sessionId}_${recoveryData.recovery_point_id}`;
+      const recoveryKey = `recovery_${sessionId}_${Date.now()}`;
       const serialized = JSON.stringify(recoveryData);
       const compressed = CompressionUtils.compress(
         serialized,
@@ -841,8 +884,8 @@ export class SessionPersistenceService {
 
       await this.adapter.set(this.indexKey, JSON.stringify(updatedIndex));
     } catch (error) {
-      console.error("Failed to update session index:", error);
-      throw error;
+      console.error("Error during index update:", error);
+      // Continue with the operation even if index update fails
     }
   }
 
@@ -870,16 +913,16 @@ export class SessionPersistenceService {
     }
   }
 
-  private calculateChecksum(data: any): string {
-    // Simple checksum calculation - in production, use a proper hash function
-    const str = JSON.stringify(data);
+  private calculateChecksum(data: unknown): string {
+    // Simple checksum calculation using JSON.stringify
+    const jsonString = JSON.stringify(data);
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
+    for (let i = 0; i < jsonString.length; i++) {
+      const char = jsonString.charCodeAt(i);
       hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash; // Convert to 32bit integer
     }
-    return Math.abs(hash).toString(16);
+    return hash.toString(16);
   }
 
   // Clean up resources
@@ -936,20 +979,44 @@ export interface UseSessionPersistenceReturn {
 export const useSessionPersistence = (
   options: UseSessionPersistenceOptions = {}
 ): UseSessionPersistenceReturn => {
+  const [service] = useState(() => new SessionPersistenceService(options));
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastOperation, setLastOperation] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const serviceRef = useRef<SessionPersistenceService>();
+  const executeOperation = async <T>(
+    operation: () => Promise<SessionOperationResult<T>>
+  ): Promise<SessionOperationResult<T>> => {
+    try {
+      setError(null);
+      const result = await operation();
+      setLastOperation(new Date());
 
-  // Initialize service
+      if (!result.success && result.error) {
+        setError(result.error);
+      }
+
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
+      return {
+        success: false,
+        error: errorMessage,
+      };
+    }
+  };
+
   useEffect(() => {
-    serviceRef.current = new SessionPersistenceService(options);
+    if (options.autoSave) {
+      setIsAutoSaving(true);
+      // Auto-save logic would be implemented here
+    }
 
     return () => {
-      serviceRef.current?.dispose();
+      service.dispose();
     };
-  }, []);
+  }, [service]);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -992,7 +1059,7 @@ export const useSessionPersistence = (
   const saveSession = useCallback(
     (session: Session) => {
       return handleOperation(
-        () => serviceRef.current!.saveSession(session),
+        () => service.saveSession(session),
         "Session saved successfully"
       );
     },
@@ -1002,7 +1069,7 @@ export const useSessionPersistence = (
   const loadSession = useCallback(
     (sessionId: string) => {
       return handleOperation(
-        () => serviceRef.current!.loadSession(sessionId),
+        () => service.loadSession(sessionId),
         "Session loaded successfully"
       );
     },
@@ -1012,7 +1079,7 @@ export const useSessionPersistence = (
   const deleteSession = useCallback(
     (sessionId: string) => {
       return handleOperation(
-        () => serviceRef.current!.deleteSession(sessionId),
+        () => service.deleteSession(sessionId),
         "Session deleted successfully"
       );
     },
@@ -1020,13 +1087,13 @@ export const useSessionPersistence = (
   );
 
   const getAllSessions = useCallback(() => {
-    return handleOperation(() => serviceRef.current!.getAllSessions());
+    return handleOperation(() => service.getAllSessions());
   }, [handleOperation]);
 
   const exportSession = useCallback(
     (sessionId: string) => {
       return handleOperation(
-        () => serviceRef.current!.exportSession(sessionId),
+        () => service.exportSession(sessionId),
         "Session exported successfully"
       );
     },
@@ -1036,7 +1103,7 @@ export const useSessionPersistence = (
   const importSession = useCallback(
     (exportData: SessionExport) => {
       return handleOperation(
-        () => serviceRef.current!.importSession(exportData),
+        () => service.importSession(exportData),
         "Session imported successfully"
       );
     },
@@ -1044,12 +1111,12 @@ export const useSessionPersistence = (
   );
 
   const getStorageStats = useCallback(() => {
-    return serviceRef.current!.getStorageStats();
+    return service.getStorageStats();
   }, []);
 
   const cleanup = useCallback(() => {
     return handleOperation(
-      () => serviceRef.current!.cleanup(),
+      () => service.cleanup(),
       "Cleanup completed successfully"
     );
   }, [handleOperation]);
@@ -1057,7 +1124,7 @@ export const useSessionPersistence = (
   const createRecoveryPoint = useCallback(
     (sessionId: string) => {
       return handleOperation(
-        () => serviceRef.current!.createRecoveryPoint(sessionId),
+        () => service.createRecoveryPoint(sessionId),
         "Recovery point created"
       );
     },

@@ -2,6 +2,10 @@ import { PopulationDataPoint } from "@/components/visualization/PopulationChart"
 import { SimulationDataPoint } from "@/components/visualization/hooks/useSimulationData";
 import { Session } from "./schemas/session";
 import { toast } from "sonner";
+import {
+  simulationParametersSchema,
+  validateSimulationParameters,
+} from "./validation";
 
 // Export format types
 export type ExportFormat = "json" | "csv" | "tsv" | "xlsx";
@@ -179,15 +183,18 @@ export class DataExportService {
 
       // Add timing metadata
       result.metadata = {
-        ...result.metadata,
+        recordsExported: result.metadata?.recordsExported || 0,
         exportTime: Date.now() - startTime,
+        ...result.metadata,
       };
 
       // Show success toast
       toast.success(
         `Data exported successfully as ${options.format.toUpperCase()}`,
         {
-          description: `${result.metadata.recordsExported} records exported in ${result.metadata.exportTime}ms`,
+          description: `${
+            result.metadata?.recordsExported || 0
+          } records exported in ${result.metadata?.exportTime || 0}ms`,
         }
       );
 
@@ -285,7 +292,17 @@ export class DataExportService {
    * Calculate statistics from population data
    */
   private static calculateStatistics(data: PopulationDataPoint[]) {
-    if (data.length === 0) return {};
+    if (data.length === 0) {
+      return {
+        averagePopulation: 0,
+        peakPopulation: 0,
+        averageResistance: 0,
+        peakResistance: 0,
+        finalResistancePercentage: 0,
+        populationGrowthRate: 0,
+        extinctionEvents: 0,
+      };
+    }
 
     const populations = data.map(d => d.totalPopulation);
     const resistantPops = data.map(d => d.resistantPopulation);
@@ -382,8 +399,10 @@ export class DataExportService {
       {
         key: "resistancePercentage",
         header: "Resistance Percentage",
-        formatter: (resistant: number, total: number) =>
-          total > 0 ? ((resistant / total) * 100).toFixed(precision) : "0",
+        formatter: (value: any) => {
+          // This will be calculated dynamically in the CSV generation
+          return value;
+        },
       },
       {
         key: "antibioticConcentration",
@@ -565,12 +584,6 @@ export class DataExportService {
     metadata?: Record<string, unknown>
   ): ExportResult {
     try {
-      // Import validation schema
-      const {
-        simulationParametersSchema,
-        validateSimulationParameters,
-      } = require("../validation");
-
       // Validate parameters if requested
       let validationResult: any = {
         success: true,

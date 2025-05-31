@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle,
   CheckCircle,
   XCircle,
   RefreshCw,
   Info,
-  Clock,
   Database,
 } from "lucide-react";
 import {
@@ -40,12 +39,26 @@ import {
 } from "@/components/ui/accordion";
 import {
   useSessionRecovery,
-  InterruptedSession,
   RecoveryType,
   RecoveryOptions,
   RecoveryResult,
-  RecoveryIssue,
 } from "@/lib/session-recovery";
+
+// Define proper types for suggestions
+interface RecoveryRecommendation {
+  sessionId: string;
+  action: "auto_recover" | "manual_review" | "discard";
+  confidence: number;
+  reason: string;
+  estimatedRecoveryTime?: number;
+}
+
+interface RecoverySuggestions {
+  recommendations: RecoveryRecommendation[];
+  totalSessions: number;
+  highConfidenceCount: number;
+  estimatedTotalTime: number;
+}
 
 interface SessionRecoveryDialogProps {
   open: boolean;
@@ -59,7 +72,6 @@ export const SessionRecoveryDialog: React.FC<SessionRecoveryDialogProps> = ({
   onSessionRecovered,
 }) => {
   const {
-    checkForInterrupted,
     recoverSession,
     autoRecover,
     getRecoverySuggestions,
@@ -83,16 +95,12 @@ export const SessionRecoveryDialog: React.FC<SessionRecoveryDialogProps> = ({
   const [currentStep, setCurrentStep] = useState<
     "detection" | "options" | "recovery" | "results"
   >("detection");
-  const [suggestions, setSuggestions] = useState<any>(null);
+  const [suggestions, setSuggestions] = useState<RecoverySuggestions | null>(
+    null
+  );
 
   // Load suggestions when dialog opens
-  useEffect(() => {
-    if (open) {
-      loadSuggestions();
-    }
-  }, [open]);
-
-  const loadSuggestions = async () => {
+  const loadSuggestions = useCallback(async () => {
     try {
       const suggestionsData = await getRecoverySuggestions();
       setSuggestions(suggestionsData);
@@ -100,15 +108,22 @@ export const SessionRecoveryDialog: React.FC<SessionRecoveryDialogProps> = ({
       // Auto-select high-confidence sessions
       const autoSelectIds = suggestionsData.recommendations
         .filter(
-          (rec: any) => rec.action === "auto_recover" && rec.confidence > 0.9
+          (rec: RecoveryRecommendation) =>
+            rec.action === "auto_recover" && rec.confidence > 0.9
         )
-        .map((rec: any) => rec.sessionId);
+        .map((rec: RecoveryRecommendation) => rec.sessionId);
 
       setSelectedSessions(new Set(autoSelectIds));
     } catch (error) {
       console.error("Failed to load suggestions:", error);
     }
-  };
+  }, [getRecoverySuggestions]);
+
+  useEffect(() => {
+    if (open) {
+      loadSuggestions();
+    }
+  }, [open, loadSuggestions]);
 
   const getIntegrityColor = (integrity: number) => {
     if (integrity >= 0.8) return "text-green-600";
@@ -222,7 +237,8 @@ export const SessionRecoveryDialog: React.FC<SessionRecoveryDialogProps> = ({
         <div className="space-y-3">
           {interruptedSessions.map(session => {
             const suggestion = suggestions?.recommendations.find(
-              (rec: any) => rec.sessionId === session.sessionId
+              (rec: RecoveryRecommendation) =>
+                rec.sessionId === session.sessionId
             );
             const isSelected = selectedSessions.has(session.sessionId);
             const integrityBadge = getIntegrityBadge(session.dataIntegrity);
@@ -282,8 +298,14 @@ export const SessionRecoveryDialog: React.FC<SessionRecoveryDialogProps> = ({
                     {suggestion && (
                       <Alert className="mt-2">
                         <Info className="h-4 w-4" />
-                        <AlertDescription className="text-xs">
-                          {suggestion.reason}
+                        <AlertDescription>
+                          <strong>Recommendation:</strong> {suggestion.reason}
+                          {suggestion.confidence && (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              ({Math.round(suggestion.confidence * 100)}%
+                              confidence)
+                            </span>
+                          )}
                         </AlertDescription>
                       </Alert>
                     )}
@@ -533,7 +555,7 @@ export const SessionRecoveryDialog: React.FC<SessionRecoveryDialogProps> = ({
               </Button>
 
               {suggestions?.recommendations.some(
-                (rec: any) => rec.action === "auto_recover"
+                (rec: RecoveryRecommendation) => rec.action === "auto_recover"
               ) && (
                 <Button
                   variant="secondary"

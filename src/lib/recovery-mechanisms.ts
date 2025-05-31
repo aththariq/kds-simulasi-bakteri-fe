@@ -31,6 +31,8 @@ export class FormStateManager {
   private static readonly EXPIRY_HOURS = 24;
 
   static saveFormState(formId: string, data: unknown): void {
+    if (typeof window === "undefined") return;
+
     try {
       const recoveryState: RecoveryState = {
         id: formId,
@@ -63,6 +65,8 @@ export class FormStateManager {
       onError?: (error: unknown) => void;
     } = {}
   ): unknown | null {
+    if (typeof window === "undefined") return null;
+
     try {
       const stored = localStorage.getItem(`${this.STORAGE_PREFIX}${formId}`);
       if (!stored) return null;
@@ -99,11 +103,14 @@ export class FormStateManager {
   }
 
   static hasFormState(formId: string): boolean {
+    if (typeof window === "undefined") return false;
     const data = this.restoreFormState(formId);
     return data !== null;
   }
 
   static clearFormState(formId: string): void {
+    if (typeof window === "undefined") return;
+
     try {
       localStorage.removeItem(`${this.STORAGE_PREFIX}${formId}`);
     } catch (error) {
@@ -112,6 +119,8 @@ export class FormStateManager {
   }
 
   static clearExpiredStates(): void {
+    if (typeof window === "undefined") return;
+
     try {
       const keys = Object.keys(localStorage);
       keys.forEach(key => {
@@ -124,7 +133,7 @@ export class FormStateManager {
                 localStorage.removeItem(key);
               }
             }
-          } catch (_error) {
+          } catch {
             // If we can't parse or access the data, remove it
             localStorage.removeItem(key);
           }
@@ -136,11 +145,14 @@ export class FormStateManager {
   }
 
   static hasRecoveryData(formId: string): boolean {
+    if (typeof window === "undefined") return false;
     const data = this.restoreFormState(formId);
     return data !== null;
   }
 
   static getRecoveryState(formId: string): RecoveryState | null {
+    if (typeof window === "undefined") return null;
+
     try {
       const stored = localStorage.getItem(`${this.STORAGE_PREFIX}${formId}`);
       if (!stored) return null;
@@ -452,6 +464,8 @@ export class SessionRecoveryManager {
   private static readonly SESSION_KEY = "app_session_recovery";
 
   static saveSessionState(state: unknown): void {
+    if (typeof window === "undefined") return;
+
     try {
       const sessionData = {
         state,
@@ -466,6 +480,8 @@ export class SessionRecoveryManager {
   }
 
   static restoreSessionState(): unknown | null {
+    if (typeof window === "undefined") return null;
+
     try {
       const stored = sessionStorage.getItem(this.SESSION_KEY);
       if (!stored) return null;
@@ -511,6 +527,15 @@ export const RecoveryUtils = {
     webSockets: boolean;
     notifications: boolean;
   } {
+    if (typeof window === "undefined") {
+      return {
+        localStorage: false,
+        sessionStorage: false,
+        webSockets: false,
+        notifications: false,
+      };
+    }
+
     return {
       localStorage: typeof Storage !== "undefined" && !!window.localStorage,
       sessionStorage: typeof Storage !== "undefined" && !!window.sessionStorage,
@@ -521,6 +546,8 @@ export const RecoveryUtils = {
 
   // Clear all recovery data
   clearAllRecoveryData(): void {
+    if (typeof window === "undefined") return;
+
     try {
       FormStateManager.clearExpiredStates();
       SessionRecoveryManager.restoreSessionState(); // This clears it
@@ -543,6 +570,10 @@ export const RecoveryUtils = {
     sessionStorage: number;
     recoveryData: number;
   } {
+    if (typeof window === "undefined") {
+      return { localStorage: 0, sessionStorage: 0, recoveryData: 0 };
+    }
+
     try {
       const getStorageSize = (storage: Storage) => {
         let total = 0;
@@ -582,6 +613,8 @@ export const RecoveryUtils = {
 
 // Initialize recovery mechanisms
 export function initializeRecoveryMechanisms(): void {
+  if (typeof window === "undefined") return;
+
   // Clear expired form states on app start
   FormStateManager.clearExpiredStates();
 
