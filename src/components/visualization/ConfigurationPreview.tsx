@@ -39,7 +39,7 @@ const generateSampleData = (points: number = 20) => {
   }));
 };
 
-interface ConfigurationPreviewProps {
+export interface ConfigurationPreviewProps {
   className?: string;
 }
 

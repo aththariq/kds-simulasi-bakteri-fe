@@ -26,6 +26,8 @@ import {
   ExportDialog,
   ExportDialogTrigger,
 } from "@/components/ui/export-dialog";
+import { Session } from "@/types/session";
+import { SimulationParameters } from "@/lib/validation";
 
 // Define proper types for simulation data
 interface SimulationDataPoint {
@@ -38,35 +40,12 @@ interface SimulationDataPoint {
   [key: string]: string | number | boolean | null | undefined;
 }
 
-interface SessionData {
+// Update VisualizationData to match ExportDialog expectations
+interface VisualizationData {
   id: string;
   name: string;
-  createdAt: string;
-  updatedAt: string;
-  status: string;
-  metadata?: Record<string, unknown>;
-  config?: Record<string, unknown>;
-  simulations?: unknown[];
-  performance?: Record<string, unknown>;
-  state?: Record<string, unknown>;
-  checkpoints?: unknown[];
-}
-
-interface SimulationParameters {
-  populationSize: number;
-  generations: number;
-  mutationRate: number;
-  hgtRate: number;
-  initialResistanceFrequency: number;
-  antibioticConcentration: number;
-  [key: string]: number | string | boolean | object; // Allow additional parameters
-}
-
-interface VisualizationData {
+  chartRef: React.RefObject<HTMLElement>;
   type: string;
-  title: string;
-  data: unknown;
-  config?: Record<string, unknown>;
 }
 
 // Types for simulation state management
@@ -92,7 +71,7 @@ interface SimulationProgressTrackerProps {
 
   // Optional data for export functionality
   simulationData?: SimulationDataPoint[];
-  sessionData?: SessionData;
+  sessionData?: Session;
   parameters?: SimulationParameters;
   visualizations?: VisualizationData[];
 }

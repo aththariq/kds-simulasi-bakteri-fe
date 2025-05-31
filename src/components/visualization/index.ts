@@ -27,10 +27,15 @@ export type {
   ChartControlsProps,
   ChartViewMode,
   TimeRange,
+  SeriesVisibility,
 } from "./ChartControls";
 
 export { ChartTooltip } from "./ChartTooltip";
 export { InteractiveChart } from "./InteractiveChart";
+export type {
+  InteractiveChartProps,
+  InteractiveChartConfig,
+} from "./InteractiveChart";
 
 // Performance optimization
 export {
@@ -92,8 +97,10 @@ export type {
 
 // Additional components
 export { default as ResultsDashboard } from "./ResultsDashboard";
+export type { ResultsDashboardProps } from "./ResultsDashboard";
 export { PerformanceMonitor } from "./PerformanceMonitor";
 export { ConfigurationPreview } from "./ConfigurationPreview";
+export type { ConfigurationPreviewProps } from "./ConfigurationPreview";
 export { ConfigurationPanel } from "./ConfigurationPanel";
 export { ConfigurationDemo } from "./ConfigurationDemo";
 export { DataBindingDemo } from "./DataBindingDemo";
@@ -106,3 +113,17 @@ export { default as CanvasPetriDishRenderer } from "./CanvasPetriDishRenderer";
 export type { CanvasPetriDishRendererRef } from "./CanvasPetriDishRenderer";
 export { default as OptimizedPetriDishVisualization } from "./OptimizedPetriDishVisualization";
 export { default as PerformanceTest } from "./PerformanceTest";
+
+// Statistical visualization components
+export { ResistanceStatisticalCharts } from "./ResistanceStatisticalCharts";
+export type {
+  ResistanceStatisticalChartsProps,
+  HistogramBin,
+  BoxPlotData,
+  StatisticalSummary,
+  ComparativeDataset,
+  SynchronizedChartState,
+} from "./ResistanceStatisticalCharts";
+
+// D3.js visualization components
+export * from "./d3";

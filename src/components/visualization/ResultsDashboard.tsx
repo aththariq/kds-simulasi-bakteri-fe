@@ -258,7 +258,7 @@ const samplePetriData = {
   timestamp: Date.now(),
 };
 
-interface ResultsDashboardProps {
+export interface ResultsDashboardProps {
   simulationId?: string;
   initialData?: Partial<DashboardData>;
   onRefresh?: () => void;
