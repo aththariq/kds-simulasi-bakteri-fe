@@ -100,3 +100,9 @@ export { DataBindingDemo } from "./DataBindingDemo";
 export { default as SimulationDashboard } from "./SimulationDashboard";
 export { default as ResponsiveTest } from "./ResponsiveTest";
 export { default as TestChart } from "./TestChart";
+
+// Canvas-based optimized visualization components
+export { default as CanvasPetriDishRenderer } from "./CanvasPetriDishRenderer";
+export type { CanvasPetriDishRendererRef } from "./CanvasPetriDishRenderer";
+export { default as OptimizedPetriDishVisualization } from "./OptimizedPetriDishVisualization";
+export { default as PerformanceTest } from "./PerformanceTest";
