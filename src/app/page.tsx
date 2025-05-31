@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Card,
   CardContent,
@@ -8,6 +10,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SimulationParametersForm from "@/components/simulation/SimulationParametersForm";
 import SimulationController from "@/components/simulation/SimulationController";
+import ResultsDashboard from "@/components/visualization/ResultsDashboard";
 
 export default function Home() {
   return (
@@ -65,19 +68,14 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="results" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Results & Analysis</CardTitle>
-                <CardDescription>
-                  View simulation results, charts, and analysis
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                  Results dashboard will be implemented here
-                </div>
-              </CardContent>
-            </Card>
+            <ResultsDashboard
+              onRefresh={() => {
+                console.log("Refreshing simulation data...");
+              }}
+              onExport={(format: string) => {
+                console.log(`Exporting data in ${format} format...`);
+              }}
+            />
           </TabsContent>
         </Tabs>
       </div>

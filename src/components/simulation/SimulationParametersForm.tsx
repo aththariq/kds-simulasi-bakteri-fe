@@ -24,6 +24,7 @@ import {
   validateSimulationParameters,
   parameterValidators,
 } from "@/lib/validation";
+import { formatNumber, formatPercentage } from "@/lib/utils";
 
 const defaultParameters: SimulationParameters = {
   populationSize: 10000,
@@ -160,7 +161,7 @@ export default function SimulationParametersForm() {
   };
 
   const updateParameter = (key: keyof SimulationParameters, value: number) => {
-    setParameters((prev) => ({
+    setParameters(prev => ({
       ...prev,
       [key]: value,
     }));
@@ -170,7 +171,7 @@ export default function SimulationParametersForm() {
       const validator =
         parameterValidators[key as keyof typeof parameterValidators];
       const error = validator(value);
-      setErrors((prev) => {
+      setErrors(prev => {
         const newErrors = {
           ...prev,
           [key]: error || "",
@@ -192,7 +193,7 @@ export default function SimulationParametersForm() {
     key: keyof SimulationParameters["fitnessValues"],
     value: number
   ) => {
-    setParameters((prev) => ({
+    setParameters(prev => ({
       ...prev,
       fitnessValues: {
         ...prev.fitnessValues,
@@ -201,7 +202,7 @@ export default function SimulationParametersForm() {
     }));
 
     // Clear fitness-related errors temporarily
-    setErrors((prev) => {
+    setErrors(prev => {
       const newErrors = { ...prev };
       delete newErrors.fitnessValues;
       return newErrors;
@@ -227,12 +228,14 @@ export default function SimulationParametersForm() {
       newParameters.gridSize.width * newParameters.gridSize.height;
     if (totalCells > 40000) {
       announceToScreenReader(
-        `Warning: Grid size is ${totalCells.toLocaleString()} cells. This may impact performance.`
+        `Warning: Grid size is ${formatNumber(
+          totalCells
+        )} cells. This may impact performance.`
       );
     }
 
     // Clear grid-related errors temporarily
-    setErrors((prev) => {
+    setErrors(prev => {
       const newErrors = { ...prev };
       delete newErrors.gridSize;
       return newErrors;
@@ -341,8 +344,7 @@ export default function SimulationParametersForm() {
                       errors.populationSize ? "text-red-600" : ""
                     }`}
                   >
-                    Population Size:{" "}
-                    {parameters.populationSize.toLocaleString()}
+                    Population Size: {formatNumber(parameters.populationSize)}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -368,7 +370,7 @@ export default function SimulationParametersForm() {
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Set to {preset.value.toLocaleString()}</p>
+                            <p>Set to {formatNumber(preset.value)}</p>
                           </TooltipContent>
                         </Tooltip>
                       )
@@ -381,11 +383,13 @@ export default function SimulationParametersForm() {
                   max={100000}
                   step={1000}
                   value={[parameters.populationSize]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateParameter("populationSize", value[0])
                   }
                   className="w-full"
-                  aria-label={`Population Size: ${parameters.populationSize.toLocaleString()}`}
+                  aria-label={`Population Size: ${formatNumber(
+                    parameters.populationSize
+                  )}`}
                   aria-describedby={
                     errors.populationSize
                       ? "populationSize-error"
@@ -467,7 +471,7 @@ export default function SimulationParametersForm() {
                   max={1000}
                   step={10}
                   value={[parameters.generations]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateParameter("generations", value[0])
                   }
                   className="w-full"
@@ -537,7 +541,7 @@ export default function SimulationParametersForm() {
                     errors.mutationRate ? "text-red-600" : ""
                   }`}
                 >
-                  Mutation Rate: {(parameters.mutationRate * 100).toFixed(3)}%
+                  Mutation Rate: {formatPercentage(parameters.mutationRate, 3)}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -553,13 +557,14 @@ export default function SimulationParametersForm() {
                   max={0.01}
                   step={0.0001}
                   value={[parameters.mutationRate]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateParameter("mutationRate", value[0])
                   }
                   className="w-full"
-                  aria-label={`Mutation Rate: ${(
-                    parameters.mutationRate * 100
-                  ).toFixed(3)} percent`}
+                  aria-label={`Mutation Rate: ${formatPercentage(
+                    parameters.mutationRate,
+                    3
+                  )}`}
                   aria-describedby={
                     errors.mutationRate
                       ? "mutationRate-error"
@@ -602,7 +607,7 @@ export default function SimulationParametersForm() {
                   }`}
                 >
                   Horizontal Gene Transfer Rate:{" "}
-                  {(parameters.hgtRate * 100).toFixed(2)}%
+                  {formatPercentage(parameters.hgtRate, 2)}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -618,13 +623,12 @@ export default function SimulationParametersForm() {
                   max={0.1}
                   step={0.001}
                   value={[parameters.hgtRate]}
-                  onValueChange={(value) =>
-                    updateParameter("hgtRate", value[0])
-                  }
+                  onValueChange={value => updateParameter("hgtRate", value[0])}
                   className="w-full"
-                  aria-label={`Horizontal Gene Transfer Rate: ${(
-                    parameters.hgtRate * 100
-                  ).toFixed(2)} percent`}
+                  aria-label={`Horizontal Gene Transfer Rate: ${formatPercentage(
+                    parameters.hgtRate,
+                    2
+                  )}`}
                   aria-describedby={
                     errors.hgtRate ? "hgtRate-error" : "hgtRate-range"
                   }
@@ -689,7 +693,7 @@ export default function SimulationParametersForm() {
                   }`}
                 >
                   Initial Resistance Frequency:{" "}
-                  {(parameters.initialResistanceFrequency * 100).toFixed(2)}%
+                  {formatPercentage(parameters.initialResistanceFrequency, 2)}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -705,13 +709,13 @@ export default function SimulationParametersForm() {
                   max={0.5}
                   step={0.001}
                   value={[parameters.initialResistanceFrequency]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateParameter("initialResistanceFrequency", value[0])
                   }
                   className="w-full"
-                  aria-label={`Initial Resistance Frequency: ${(
+                  aria-label={`Initial Resistance Frequency: ${formatPercentage(
                     parameters.initialResistanceFrequency * 100
-                  ).toFixed(2)} percent`}
+                  )}`}
                   aria-describedby={
                     errors.initialResistanceFrequency
                       ? "initialResistanceFrequency-error"
@@ -755,7 +759,10 @@ export default function SimulationParametersForm() {
                     }`}
                   >
                     Antibiotic Concentration:{" "}
-                    {parameters.antibioticConcentration.toFixed(2)}x
+                    {formatNumber(parameters.antibioticConcentration, {
+                      decimals: 2,
+                      unit: "x",
+                    })}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -796,12 +803,13 @@ export default function SimulationParametersForm() {
                   max={10}
                   step={0.1}
                   value={[parameters.antibioticConcentration]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateParameter("antibioticConcentration", value[0])
                   }
                   className="w-full"
-                  aria-label={`Antibiotic Concentration: ${parameters.antibioticConcentration.toFixed(
-                    2
+                  aria-label={`Antibiotic Concentration: ${formatNumber(
+                    parameters.antibioticConcentration,
+                    { decimals: 2 }
                   )} times`}
                   aria-describedby={
                     errors.antibioticConcentration
@@ -867,7 +875,9 @@ export default function SimulationParametersForm() {
                   className="flex items-center gap-2"
                 >
                   Resistant Fitness:{" "}
-                  {parameters.fitnessValues.resistantFitness.toFixed(2)}
+                  {formatNumber(parameters.fitnessValues.resistantFitness, {
+                    decimals: 2,
+                  })}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -883,12 +893,13 @@ export default function SimulationParametersForm() {
                   max={1.5}
                   step={0.01}
                   value={[parameters.fitnessValues.resistantFitness]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateFitnessValue("resistantFitness", value[0])
                   }
                   className="w-full"
-                  aria-label={`Resistant Fitness: ${parameters.fitnessValues.resistantFitness.toFixed(
-                    2
+                  aria-label={`Resistant Fitness: ${formatNumber(
+                    parameters.fitnessValues.resistantFitness,
+                    { decimals: 2 }
                   )}`}
                   aria-describedby="resistantFitness-range"
                 />
@@ -909,7 +920,9 @@ export default function SimulationParametersForm() {
                   className="flex items-center gap-2"
                 >
                   Sensitive Fitness:{" "}
-                  {parameters.fitnessValues.sensitiveFitness.toFixed(2)}
+                  {formatNumber(parameters.fitnessValues.sensitiveFitness, {
+                    decimals: 2,
+                  })}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -925,12 +938,13 @@ export default function SimulationParametersForm() {
                   max={1.5}
                   step={0.01}
                   value={[parameters.fitnessValues.sensitiveFitness]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateFitnessValue("sensitiveFitness", value[0])
                   }
                   className="w-full"
-                  aria-label={`Sensitive Fitness: ${parameters.fitnessValues.sensitiveFitness.toFixed(
-                    2
+                  aria-label={`Sensitive Fitness: ${formatNumber(
+                    parameters.fitnessValues.sensitiveFitness,
+                    { decimals: 2 }
                   )}`}
                   aria-describedby="sensitiveFitness-range"
                 />
@@ -951,7 +965,9 @@ export default function SimulationParametersForm() {
                   className="flex items-center gap-2"
                 >
                   Resistance Cost:{" "}
-                  {parameters.fitnessValues.resistanceCost.toFixed(2)}
+                  {formatNumber(parameters.fitnessValues.resistanceCost, {
+                    decimals: 2,
+                  })}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -967,12 +983,13 @@ export default function SimulationParametersForm() {
                   max={0.5}
                   step={0.01}
                   value={[parameters.fitnessValues.resistanceCost]}
-                  onValueChange={(value) =>
+                  onValueChange={value =>
                     updateFitnessValue("resistanceCost", value[0])
                   }
                   className="w-full"
-                  aria-label={`Resistance Cost: ${parameters.fitnessValues.resistanceCost.toFixed(
-                    2
+                  aria-label={`Resistance Cost: ${formatNumber(
+                    parameters.fitnessValues.resistanceCost,
+                    { decimals: 2 }
                   )}`}
                   aria-describedby="resistanceCost-range"
                 />
@@ -1046,7 +1063,7 @@ export default function SimulationParametersForm() {
                     max={200}
                     step={10}
                     value={[parameters.gridSize.width]}
-                    onValueChange={(value) => updateGridSize("width", value[0])}
+                    onValueChange={value => updateGridSize("width", value[0])}
                     className="w-full"
                     aria-label={`Grid Width: ${parameters.gridSize.width}`}
                     aria-describedby="gridWidth-range"
@@ -1083,9 +1100,7 @@ export default function SimulationParametersForm() {
                     max={200}
                     step={10}
                     value={[parameters.gridSize.height]}
-                    onValueChange={(value) =>
-                      updateGridSize("height", value[0])
-                    }
+                    onValueChange={value => updateGridSize("height", value[0])}
                     className="w-full"
                     aria-label={`Grid Height: ${parameters.gridSize.height}`}
                     aria-describedby="gridHeight-range"
@@ -1120,9 +1135,9 @@ export default function SimulationParametersForm() {
                   }`}
                 >
                   <strong>Total Grid Cells:</strong>{" "}
-                  {(
+                  {formatNumber(
                     parameters.gridSize.width * parameters.gridSize.height
-                  ).toLocaleString()}
+                  )}
                   {parameters.gridSize.width * parameters.gridSize.height >
                     40000 && (
                     <span className="block mt-1 font-medium">
@@ -1155,14 +1170,14 @@ export default function SimulationParametersForm() {
             type="submit"
             className="flex-1 sm:flex-none"
             disabled={
-              isValidating || Object.values(errors).some((error) => error)
+              isValidating || Object.values(errors).some(error => error)
             }
             aria-describedby="submit-status"
           >
             {isValidating ? "Validating..." : "Start Simulation"}
           </Button>
           <div id="submit-status" className="sr-only" aria-live="polite">
-            {Object.values(errors).some((error) => error)
+            {Object.values(errors).some(error => error)
               ? "Cannot submit: form contains validation errors"
               : "Ready to submit simulation"}
           </div>
@@ -1170,7 +1185,7 @@ export default function SimulationParametersForm() {
             type="button"
             variant="outline"
             onClick={handleReset}
-            onKeyDown={(e) => handleKeyDown(e, handleReset)}
+            onKeyDown={e => handleKeyDown(e, handleReset)}
           >
             Reset to Defaults
           </Button>
