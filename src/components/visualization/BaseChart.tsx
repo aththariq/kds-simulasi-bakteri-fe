@@ -99,7 +99,7 @@ const ChartContainer: React.FC<{
       <ResponsiveContainer
         width={config.width}
         height={config.height}
-        className={className}
+        className={cn("min-h-0 flex-1", className)}
       >
         {children as React.ReactElement}
       </ResponsiveContainer>
@@ -108,7 +108,7 @@ const ChartContainer: React.FC<{
 
   return (
     <div
-      className={className}
+      className={cn("overflow-hidden", className)}
       style={{
         width: config.width,
         height: config.height,
@@ -136,7 +136,7 @@ export const BaseChart: React.FC<BaseChartProps> = ({
   );
 
   const containerClassName = cn(
-    "chart-container bg-white border border-gray-200 rounded-lg p-4",
+    "chart-container bg-white border border-gray-200 rounded-lg p-4 overflow-hidden flex flex-col h-full",
     className
   );
 
@@ -202,16 +202,18 @@ export const BaseChart: React.FC<BaseChartProps> = ({
   return (
     <div className={containerClassName}>
       {title && (
-        <div className="mb-4">
+        <div className="mb-4 flex-shrink-0">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           {description && (
             <p className="text-sm text-gray-600 mt-1">{description}</p>
           )}
         </div>
       )}
-      <ChartContainer config={mergedConfig} className="chart-content">
-        {children}
-      </ChartContainer>
+      <div className="flex-1 min-h-0">
+        <ChartContainer config={mergedConfig} className="w-full h-full">
+          {children}
+        </ChartContainer>
+      </div>
     </div>
   );
 };

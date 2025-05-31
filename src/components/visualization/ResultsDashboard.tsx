@@ -553,15 +553,14 @@ export default function ResultsDashboard({
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="h-[300px] sm:h-[350px] lg:h-[400px]">
-                  <PopulationGrowthChart
-                    data={dataState.data.population}
-                    title="Population Growth Over Time"
-                    showCarryingCapacity={true}
-                    showGrowthRate={true}
-                    chartType="composed"
-                  />
-                </div>
+                <PopulationGrowthChart
+                  data={dataState.data.population}
+                  title="Population Growth Over Time"
+                  showCarryingCapacity={true}
+                  showGrowthRate={true}
+                  chartType="composed"
+                  config={{ height: 300 }}
+                />
               </CardContent>
             </Card>
 
@@ -640,15 +639,14 @@ export default function ResultsDashboard({
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="h-[250px] sm:h-[300px] lg:h-[350px]">
-                <MutationTrackingChart
-                  data={dataState.data.mutations}
-                  title="Mutation Events Over Time"
-                  showMutationTypes={true}
-                  showEffects={true}
-                  chartType="combined"
-                />
-              </div>
+              <MutationTrackingChart
+                data={dataState.data.mutations}
+                title="Mutation Events Over Time"
+                showMutationTypes={true}
+                showEffects={true}
+                chartType="combined"
+                config={{ height: 250 }}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -770,10 +768,14 @@ export default function ResultsDashboard({
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="h-[300px] sm:h-[350px] lg:h-[400px]">
+                <div className="h-[300px] sm:h-[350px] lg:h-[400px] overflow-hidden flex">
                   <ResistanceEvolutionChart
                     data={dataState.data.resistance}
                     title="Resistance Evolution Over Time"
+                    config={{
+                      responsive: true,
+                      height: 280, // Calculated to fit within container minus title/padding
+                    }}
                   />
                 </div>
               </CardContent>
