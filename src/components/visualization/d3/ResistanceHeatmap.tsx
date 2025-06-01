@@ -11,6 +11,23 @@ import React, {
 } from "react";
 import * as d3 from "d3";
 import { ResistanceDataPoint } from "@/lib/resistance-analysis";
+import { useMobileVisualization } from "../hooks/useMobileVisualization";
+
+// ============================
+// Utility Functions
+// ============================
+
+// Simple debounce function for performance optimization
+const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): ((...args: Parameters<T>) => void) => {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+};
 
 // ============================
 // Types and Interfaces
@@ -42,6 +59,7 @@ export interface HeatmapConfig {
   legendPosition?: "top" | "bottom" | "left" | "right";
   animationDuration?: number;
   maxGenes?: number;
+  cellMinSize?: number;
 }
 
 export interface HeatmapTooltipData {
@@ -94,6 +112,7 @@ const DEFAULT_CONFIG: Required<HeatmapConfig> = {
   legendPosition: "right",
   animationDuration: 750,
   maxGenes: 20,
+  cellMinSize: 20,
 };
 
 // ============================
@@ -216,17 +235,70 @@ export const ResistanceHeatmap = forwardRef<
     const [tooltipVisible, setTooltipVisible] = useState(false);
     const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
-    // Merge configuration with defaults
-    const mergedConfig = useMemo(
-      () => ({ ...DEFAULT_CONFIG, ...config }),
-      [config]
-    );
+    // Mobile visualization optimization
+    const {
+      deviceType,
+      dimensions: mobileDimensions,
+      config: mobileConfig,
+      touchHandlers,
+      optimizeDataForMobile,
+      shouldShowLegend,
+      shouldShowGrid,
+      shouldShowTooltips,
+      animationDuration,
+      fontSize,
+      performanceSettings,
+      simplifiedSettings,
+    } = useMobileVisualization("heatmap", {
+      enableTouchGestures: true,
+      enableSimplifiedView: true,
+      performanceMode: true,
+    });
 
-    // Process data for heatmap
-    const heatmapData = useMemo(
-      () => processHeatmapData(data, mergedConfig.maxGenes),
-      [data, mergedConfig.maxGenes]
-    );
+    // Merge configuration with defaults and mobile optimizations
+    const mergedConfig = useMemo(() => {
+      const baseConfig = { ...DEFAULT_CONFIG, ...config };
+
+      // Apply mobile-specific overrides
+      if (deviceType === "mobile") {
+        return {
+          ...baseConfig,
+          width: mobileDimensions.width,
+          height: mobileDimensions.height,
+          margin: mobileDimensions.margin,
+          showLegend: shouldShowLegend(),
+          showTooltips: shouldShowTooltips(),
+          animationDuration: animationDuration,
+          // Apply chart-specific mobile config overrides
+          ...mobileConfig,
+          // Reduce complexity for mobile
+          maxGenes: Math.min(
+            baseConfig.maxGenes || 20,
+            simplifiedSettings.maxCategories
+          ),
+          // Enhance touch targets with chart-specific settings
+          cellStrokeWidth: baseConfig.cellStrokeWidth,
+          cellMinSize: 20, // Minimum touch target size
+        };
+      }
+
+      return baseConfig;
+    }, [
+      config,
+      deviceType,
+      mobileDimensions,
+      shouldShowLegend,
+      shouldShowTooltips,
+      animationDuration,
+      simplifiedSettings.maxCategories,
+      mobileConfig,
+    ]);
+
+    // Process data for heatmap with mobile optimization
+    const heatmapData = useMemo(() => {
+      const processedData = processHeatmapData(data, mergedConfig.maxGenes);
+      return optimizeDataForMobile(processedData);
+    }, [data, mergedConfig.maxGenes, optimizeDataForMobile]);
 
     // Extract unique generations and genes for scales
     const generations = useMemo(
@@ -240,39 +312,67 @@ export const ResistanceHeatmap = forwardRef<
       [heatmapData]
     );
 
-    // Set up responsive dimensions
+    // Set up responsive dimensions with mobile optimization
     useEffect(() => {
       const updateDimensions = () => {
         if (containerRef.current) {
           const { clientWidth, clientHeight } = containerRef.current;
-          setDimensions({
-            width: Math.max(clientWidth || mergedConfig.width, 400),
-            height: Math.max(clientHeight || mergedConfig.height, 300),
-          });
+
+          // Use mobile dimensions if available, otherwise fallback to container
+          const width =
+            deviceType === "mobile"
+              ? mobileDimensions.width
+              : Math.max(clientWidth || mergedConfig.width, 400);
+          const height =
+            deviceType === "mobile"
+              ? mobileDimensions.height
+              : Math.max(clientHeight || mergedConfig.height, 300);
+
+          setDimensions({ width, height });
         }
       };
 
       updateDimensions();
-      window.addEventListener("resize", updateDimensions);
-      return () => window.removeEventListener("resize", updateDimensions);
-    }, [mergedConfig.width, mergedConfig.height]);
 
-    // D3 scales
+      // Use debounced resize for performance
+      const debouncedUpdate = debounce(
+        updateDimensions,
+        performanceSettings.debounceDelay
+      );
+      window.addEventListener("resize", debouncedUpdate);
+      return () => window.removeEventListener("resize", debouncedUpdate);
+    }, [
+      mergedConfig.width,
+      mergedConfig.height,
+      deviceType,
+      mobileDimensions,
+      performanceSettings.debounceDelay,
+    ]);
+
+    // D3 scales with mobile-optimized sizing
     const scales = useMemo(() => {
       const { margin } = mergedConfig;
       const chartWidth = dimensions.width - margin.left - margin.right;
       const chartHeight = dimensions.height - margin.top - margin.bottom;
 
+      // Adjust cell sizes for touch interaction on mobile
+      const minCellSize = mergedConfig.cellMinSize || 20; // Minimum 20px for touch targets
+      const maxCellWidth = chartWidth / generations.length;
+      const maxCellHeight = chartHeight / genes.length;
+
+      const cellWidth = Math.max(minCellSize, maxCellWidth);
+      const cellHeight = Math.max(minCellSize, maxCellHeight);
+
       const xScale = d3
         .scaleBand()
         .domain(generations.map(String))
-        .range([0, chartWidth])
+        .range([0, Math.min(chartWidth, cellWidth * generations.length)])
         .padding(0.05);
 
       const yScale = d3
         .scaleBand()
         .domain(genes)
-        .range([0, chartHeight])
+        .range([0, Math.min(chartHeight, cellHeight * genes.length)])
         .padding(0.05);
 
       const colorScale = d3
@@ -282,7 +382,44 @@ export const ResistanceHeatmap = forwardRef<
       return { xScale, yScale, colorScale, chartWidth, chartHeight };
     }, [dimensions, generations, genes, mergedConfig]);
 
-    // Render heatmap
+    // Native DOM touch handlers for D3 SVG elements
+    const handleNativeTouchStart = useCallback(
+      (event: TouchEvent) => {
+        if (deviceType !== "mobile") return;
+        event.preventDefault();
+        // Delegate to mobile hook's touch handlers for standardized behavior
+        if (touchHandlers.onTouchStart) {
+          touchHandlers.onTouchStart(event as any);
+        }
+      },
+      [deviceType, touchHandlers]
+    );
+
+    const handleNativeTouchMove = useCallback(
+      (event: TouchEvent) => {
+        if (deviceType !== "mobile") return;
+        event.preventDefault();
+        // Delegate to mobile hook's touch handlers for standardized behavior
+        if (touchHandlers.onTouchMove) {
+          touchHandlers.onTouchMove(event as any);
+        }
+      },
+      [deviceType, touchHandlers]
+    );
+
+    const handleNativeTouchEnd = useCallback(
+      (event: TouchEvent) => {
+        if (deviceType !== "mobile") return;
+        event.preventDefault();
+        // Delegate to mobile hook's touch handlers for standardized behavior
+        if (touchHandlers.onTouchEnd) {
+          touchHandlers.onTouchEnd(event as any);
+        }
+      },
+      [deviceType, touchHandlers]
+    );
+
+    // Render heatmap with mobile optimizations
     useEffect(() => {
       if (!svgRef.current || !heatmapData.length || loading) return;
 
@@ -293,12 +430,19 @@ export const ResistanceHeatmap = forwardRef<
       // Clear previous content
       svg.selectAll("*").remove();
 
-      // Create main group
+      // Add touch event listeners for mobile
+      if (deviceType === "mobile") {
+        svg.node()?.addEventListener("touchstart", handleNativeTouchStart);
+        svg.node()?.addEventListener("touchmove", handleNativeTouchMove);
+        svg.node()?.addEventListener("touchend", handleNativeTouchEnd);
+      }
+
+      // Main group
       const mainGroup = svg
         .append("g")
         .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
-      // Create cells
+      // Heatmap cells with touch-optimized interaction
       const cells = mainGroup
         .selectAll(".heatmap-cell")
         .data(heatmapData)
@@ -312,92 +456,147 @@ export const ResistanceHeatmap = forwardRef<
         .attr("fill", d => colorScale(d.normalizedFrequency))
         .attr("stroke", mergedConfig.cellStroke)
         .attr("stroke-width", mergedConfig.cellStrokeWidth)
-        .style("cursor", "pointer")
-        .style("opacity", 0)
-        .on("mouseover", function (event, d) {
-          d3.select(this).style("opacity", 0.8);
-
-          if (mergedConfig.showTooltips) {
-            const tooltipData: HeatmapTooltipData = {
-              ...d,
-              x: event.pageX,
-              y: event.pageY,
-            };
-            setTooltipData(tooltipData);
-            setTooltipVisible(true);
-            onCellHover?.(tooltipData);
-          }
-        })
-        .on("mousemove", function (event, d) {
-          if (mergedConfig.showTooltips) {
-            setTooltipData(prev =>
-              prev ? { ...prev, x: event.pageX, y: event.pageY } : null
-            );
-          }
-        })
-        .on("mouseout", function () {
-          d3.select(this).style("opacity", 1);
-          setTooltipVisible(false);
-          setTooltipData(null);
-          onCellHover?.(null);
-        })
+        .style("cursor", deviceType === "mobile" ? "default" : "pointer")
         .on("click", function (event, d) {
-          const tooltipData: HeatmapTooltipData = {
-            ...d,
-            x: event.pageX,
-            y: event.pageY,
-          };
-          onCellClick?.(tooltipData);
+          if (onCellClick) {
+            const rect = this.getBoundingClientRect();
+            onCellClick({
+              ...d,
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            });
+          }
         });
 
-      // Animate cells in
-      cells
-        .transition()
-        .duration(mergedConfig.animationDuration)
-        .style("opacity", 1);
+      // Enhanced touch interaction for mobile
+      if (deviceType === "mobile") {
+        cells.on("touchstart", function (event, d) {
+          event.preventDefault();
+          const touch = event.touches[0];
+          if (onCellClick) {
+            onCellClick({
+              ...d,
+              x: touch.clientX,
+              y: touch.clientY,
+            });
+          }
+        });
+      }
+
+      // Tooltip interaction (simplified for mobile)
+      if (mergedConfig.showTooltips) {
+        cells
+          .on("mouseover", function (event, d) {
+            if (deviceType !== "mobile") {
+              // Disable hover on mobile
+              const rect = this.getBoundingClientRect();
+              setTooltipData({
+                ...d,
+                x: rect.left + rect.width / 2,
+                y: rect.top,
+              });
+              setTooltipVisible(true);
+              onCellHover?.(tooltipData);
+            }
+          })
+          .on("mouseout", function () {
+            if (deviceType !== "mobile") {
+              setTooltipVisible(false);
+              onCellHover?.(null);
+            }
+          });
+      }
+
+      // Axes with mobile-optimized font sizes
+      const xAxis = d3.axisBottom(xScale);
+      const yAxis = d3.axisLeft(yScale);
+
+      // Add grid lines if shouldShowGrid is enabled
+      if (shouldShowGrid()) {
+        // Vertical grid lines
+        mainGroup
+          .selectAll(".grid-line-vertical")
+          .data(generations)
+          .enter()
+          .append("line")
+          .attr("class", "grid-line-vertical")
+          .attr("x1", d => (xScale(String(d)) || 0) + xScale.bandwidth() / 2)
+          .attr("x2", d => (xScale(String(d)) || 0) + xScale.bandwidth() / 2)
+          .attr("y1", 0)
+          .attr("y2", scales.chartHeight)
+          .attr("stroke", "#e5e7eb")
+          .attr("stroke-width", 0.5)
+          .attr("opacity", 0.5);
+
+        // Horizontal grid lines
+        mainGroup
+          .selectAll(".grid-line-horizontal")
+          .data(genes)
+          .enter()
+          .append("line")
+          .attr("class", "grid-line-horizontal")
+          .attr("x1", 0)
+          .attr("x2", scales.chartWidth)
+          .attr("y1", d => (yScale(d) || 0) + yScale.bandwidth() / 2)
+          .attr("y2", d => (yScale(d) || 0) + yScale.bandwidth() / 2)
+          .attr("stroke", "#e5e7eb")
+          .attr("stroke-width", 0.5)
+          .attr("opacity", 0.5);
+      }
 
       // X-axis
       mainGroup
         .append("g")
         .attr("class", "x-axis")
         .attr("transform", `translate(0, ${scales.chartHeight})`)
-        .call(d3.axisBottom(xScale))
+        .call(xAxis)
         .selectAll("text")
-        .style("text-anchor", "end")
-        .attr("dx", "-.8em")
-        .attr("dy", ".15em")
-        .attr("transform", "rotate(-45)");
+        .style("font-size", `${fontSize}px`)
+        .style("text-anchor", deviceType === "mobile" ? "middle" : "end")
+        .attr("dx", deviceType === "mobile" ? "0" : "-0.8em")
+        .attr("dy", deviceType === "mobile" ? "1em" : "0.15em")
+        .attr(
+          "transform",
+          deviceType === "mobile" ? "rotate(0)" : "rotate(-45)"
+        );
 
       // Y-axis
-      mainGroup.append("g").attr("class", "y-axis").call(d3.axisLeft(yScale));
-
-      // Axis labels
       mainGroup
-        .append("text")
-        .attr("class", "x-axis-label")
-        .attr("text-anchor", "middle")
-        .attr("x", scales.chartWidth / 2)
-        .attr("y", scales.chartHeight + margin.bottom - 10)
-        .style("font-size", "14px")
-        .style("font-weight", "bold")
-        .text("Generation");
+        .append("g")
+        .attr("class", "y-axis")
+        .call(yAxis)
+        .selectAll("text")
+        .style("font-size", `${fontSize}px`);
 
-      mainGroup
-        .append("text")
-        .attr("class", "y-axis-label")
-        .attr("text-anchor", "middle")
-        .attr("transform", "rotate(-90)")
-        .attr("x", -scales.chartHeight / 2)
-        .attr("y", -margin.left + 15)
-        .style("font-size", "14px")
-        .style("font-weight", "bold")
-        .text("Resistance Gene");
+      // Axis labels (hide on mobile if space is limited)
+      if (deviceType !== "mobile" || dimensions.width > 400) {
+        mainGroup
+          .append("text")
+          .attr("class", "x-axis-label")
+          .attr("text-anchor", "middle")
+          .attr("x", scales.chartWidth / 2)
+          .attr("y", scales.chartHeight + margin.bottom - 5)
+          .style("font-size", `${fontSize}px`)
+          .style("font-weight", "bold")
+          .text("Generation");
 
-      // Legend
-      if (mergedConfig.showLegend) {
-        const legendWidth = 20;
-        const legendHeight = 200;
-        const legendX = scales.chartWidth + 20;
+        mainGroup
+          .append("text")
+          .attr("class", "y-axis-label")
+          .attr("text-anchor", "middle")
+          .attr("transform", "rotate(-90)")
+          .attr("x", -scales.chartHeight / 2)
+          .attr("y", -margin.left + 15)
+          .style("font-size", `${fontSize}px`)
+          .style("font-weight", "bold")
+          .text("Resistance Gene");
+      }
+
+      // Legend (conditionally shown based on mobile settings)
+      if (mergedConfig.showLegend && shouldShowLegend()) {
+        const legendWidth = deviceType === "mobile" ? 15 : 20;
+        const legendHeight = deviceType === "mobile" ? 120 : 200;
+        const legendX = scales.chartWidth + (deviceType === "mobile" ? 10 : 20);
         const legendY = (scales.chartHeight - legendHeight) / 2;
 
         const legendScale = d3
@@ -407,158 +606,143 @@ export const ResistanceHeatmap = forwardRef<
 
         const legendAxis = d3
           .axisRight(legendScale)
-          .tickFormat(
-            (d: d3.NumberValue) => `${(Number(d) * 100).toFixed(0)}%`
-          );
+          .tickFormat((d: d3.NumberValue) => `${(Number(d) * 100).toFixed(0)}%`)
+          .ticks(deviceType === "mobile" ? 3 : 5); // Fewer ticks on mobile
 
         const legendGroup = mainGroup
           .append("g")
           .attr("class", "legend")
           .attr("transform", `translate(${legendX}, ${legendY})`);
 
-        // Create gradient
+        // Create gradient for legend
         const gradient = svg
           .append("defs")
           .append("linearGradient")
-          .attr("id", "heatmap-gradient")
-          .attr("x1", "0%")
-          .attr("y1", "100%")
-          .attr("x2", "0%")
-          .attr("y2", "0%");
+          .attr("id", "legend-gradient")
+          .attr("gradientUnits", "userSpaceOnUse")
+          .attr("x1", 0)
+          .attr("y1", legendHeight)
+          .attr("x2", 0)
+          .attr("y2", 0);
 
-        const stops = d3.range(0, 1.1, 0.1);
+        const colorStops = d3.range(0, 1.1, 0.1);
         gradient
           .selectAll("stop")
-          .data(stops)
+          .data(colorStops)
           .enter()
           .append("stop")
           .attr("offset", d => `${d * 100}%`)
           .attr("stop-color", d => colorScale(d));
 
+        // Legend rectangle
         legendGroup
           .append("rect")
           .attr("width", legendWidth)
           .attr("height", legendHeight)
-          .style("fill", "url(#heatmap-gradient)")
-          .attr("stroke", "#000")
+          .style("fill", "url(#legend-gradient)")
+          .attr("stroke", "#333")
           .attr("stroke-width", 1);
 
+        // Legend axis
         legendGroup
           .append("g")
+          .attr("class", "legend-axis")
           .attr("transform", `translate(${legendWidth}, 0)`)
-          .call(legendAxis);
+          .call(legendAxis)
+          .selectAll("text")
+          .style("font-size", `${fontSize}px`);
 
+        // Legend title
         legendGroup
           .append("text")
+          .attr("class", "legend-title")
           .attr("text-anchor", "middle")
-          .attr(
-            "transform",
-            `translate(${legendWidth / 2}, ${legendHeight + 35}) rotate(-90)`
-          )
-          .style("font-size", "12px")
+          .attr("x", legendWidth / 2)
+          .attr("y", -10)
+          .style("font-size", `${fontSize}px`)
           .style("font-weight", "bold")
-          .text("Gene Frequency");
+          .text("Frequency");
       }
+
+      // Cleanup function
+      return () => {
+        if (deviceType === "mobile" && svg.node()) {
+          svg.node()?.removeEventListener("touchstart", handleNativeTouchStart);
+          svg.node()?.removeEventListener("touchmove", handleNativeTouchMove);
+          svg.node()?.removeEventListener("touchend", handleNativeTouchEnd);
+        }
+      };
     }, [
       heatmapData,
-      dimensions,
       scales,
       mergedConfig,
-      loading,
+      deviceType,
+      handleNativeTouchStart,
+      handleNativeTouchMove,
+      handleNativeTouchEnd,
       onCellClick,
       onCellHover,
+      tooltipData,
+      fontSize,
+      shouldShowGrid,
+      shouldShowLegend,
+      loading,
     ]);
 
     // Imperative handle for ref methods
-    useImperativeHandle(
-      ref,
-      () => ({
-        exportSVG: () => {
-          if (!svgRef.current) return "";
-          const serializer = new XMLSerializer();
-          return serializer.serializeToString(svgRef.current);
-        },
+    useImperativeHandle(ref, () => ({
+      exportSVG: () => {
+        if (!svgRef.current) return "";
+        return new XMLSerializer().serializeToString(svgRef.current);
+      },
+      exportPNG: async (scale = 2) => {
+        if (!svgRef.current) return "";
 
-        exportPNG: async (scale = 2) => {
-          if (!svgRef.current) return "";
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return "";
 
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return "";
+        const svgData = new XMLSerializer().serializeToString(svgRef.current);
+        const img = new Image();
 
-          canvas.width = dimensions.width * scale;
-          canvas.height = dimensions.height * scale;
-          ctx.scale(scale, scale);
-
-          const svgData = new XMLSerializer().serializeToString(svgRef.current);
-          const img = new Image();
-
-          return new Promise(resolve => {
-            img.onload = () => {
-              ctx.drawImage(img, 0, 0);
-              resolve(canvas.toDataURL("image/png"));
-            };
-            img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
-          });
-        },
-
-        updateData: (newData: ResistanceDataPoint[]) => {
-          // This will trigger a re-render via the data prop
-        },
-
-        highlightGeneration: (generation: number | null) => {
-          if (!svgRef.current) return;
-
-          const svg = d3.select(svgRef.current);
-          if (generation === null) {
-            svg.selectAll(".heatmap-cell").style("opacity", "1");
-          } else {
-            svg
-              .selectAll(".heatmap-cell")
-              .style("opacity", (d: any) =>
-                d.generation === generation ? "1" : "0.3"
-              );
-          }
-        },
-
-        highlightGene: (gene: string | null) => {
-          if (!svgRef.current) return;
-
-          const svg = d3.select(svgRef.current);
-          if (gene === null) {
-            svg.selectAll(".heatmap-cell").style("opacity", "1");
-          } else {
-            svg
-              .selectAll(".heatmap-cell")
-              .style("opacity", (d: any) => (d.gene === gene ? "1" : "0.3"));
-          }
-        },
-
-        resetZoom: () => {
-          if (!svgRef.current) return;
-
-          const svg = d3.select(svgRef.current);
-          svg.selectAll(".heatmap-cell").style("opacity", 1);
-        },
-      }),
-      [dimensions]
-    );
-
-    if (error) {
-      return (
-        <div
-          className={`flex items-center justify-center h-64 text-red-500 ${className}`}
-        >
-          Error: {error}
-        </div>
-      );
-    }
+        return new Promise(resolve => {
+          img.onload = () => {
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            ctx.scale(scale, scale);
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL("image/png"));
+          };
+          img.src = "data:image/svg+xml;base64," + btoa(svgData);
+        });
+      },
+      updateData: (newData: ResistanceDataPoint[]) => {
+        // This would trigger a re-render with new data
+        // Implementation depends on parent component state management
+      },
+      highlightGeneration: (generation: number | null) => {
+        // Implementation for highlighting specific generation
+      },
+      highlightGene: (gene: string | null) => {
+        // Implementation for highlighting specific gene
+      },
+      resetZoom: () => {
+        // Implementation for resetting zoom/pan state
+      },
+    }));
 
     if (loading) {
       return (
         <div className={`flex items-center justify-center h-64 ${className}`}>
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <span className="ml-2">Loading heatmap...</span>
+          <div className="text-gray-500">Loading heatmap...</div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className={`flex items-center justify-center h-64 ${className}`}>
+          <div className="text-red-500">Error: {error}</div>
         </div>
       );
     }
@@ -569,7 +753,7 @@ export const ResistanceHeatmap = forwardRef<
           ref={svgRef}
           width={dimensions.width}
           height={dimensions.height}
-          className="overflow-visible"
+          className="w-full h-auto"
         />
         <HeatmapTooltip data={tooltipData} visible={tooltipVisible} />
       </div>
@@ -578,3 +762,5 @@ export const ResistanceHeatmap = forwardRef<
 );
 
 ResistanceHeatmap.displayName = "ResistanceHeatmap";
+
+export default ResistanceHeatmap;

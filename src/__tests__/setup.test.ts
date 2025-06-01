@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom";
+import { render } from "@testing-library/react";
+import React from "react";
 
 // Basic setup test to ensure Jest is working
 describe("Test Setup", () => {
@@ -7,7 +9,10 @@ describe("Test Setup", () => {
   });
 
   it("should have jest-dom matchers available", () => {
-    const element = document.createElement("div");
+    const { container } = render(
+      React.createElement("div", { "data-testid": "test-element" }, "Test")
+    );
+    const element = container.querySelector('[data-testid="test-element"]');
     expect(element).toBeInTheDocument();
   });
 });

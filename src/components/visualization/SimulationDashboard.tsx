@@ -4,6 +4,7 @@ import * as React from "react";
 import { ResponsiveChartGrid, gridPresets } from "./ResponsiveChartGrid";
 import { PopulationChart, PopulationDataPoint } from "./PopulationChart";
 import { cn } from "@/lib/utils";
+import { typography, grids, padding } from "@/lib/responsive";
 
 // Dashboard configuration interface
 export interface DashboardConfig {
@@ -50,7 +51,7 @@ const MiniPopulationChart: React.FC<{
       showLegend={!compact}
       className={cn(
         "bg-white border border-gray-200 rounded-lg shadow-sm",
-        compact && "text-sm"
+        compact && typography.body.small
       )}
     />
   );
@@ -71,13 +72,24 @@ const StatCard: React.FC<{
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+    <div
+      className={cn(
+        "bg-white border border-gray-200 rounded-lg shadow-sm",
+        padding.card.responsive
+      )}
+    >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          <p className={cn("font-medium text-gray-600", typography.body.small)}>
+            {title}
+          </p>
+          <p className={cn("font-bold text-gray-900", typography.heading.h4)}>
+            {value}
+          </p>
           {change && (
-            <p className={cn("text-sm", trend && trendColors[trend])}>
+            <p
+              className={cn(typography.body.small, trend && trendColors[trend])}
+            >
               {change}
             </p>
           )}
@@ -165,7 +177,9 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({
         <div className="flex items-center justify-center h-96 bg-gray-50 rounded-lg">
           <div className="text-center">
             <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading simulation dashboard...</p>
+            <p className={cn("text-gray-600", typography.body.normal)}>
+              Loading simulation dashboard...
+            </p>
           </div>
         </div>
       </div>
@@ -178,8 +192,14 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({
         <div className="flex items-center justify-center h-96 bg-red-50 border border-red-200 rounded-lg">
           <div className="text-center">
             <div className="text-red-600 mb-2">⚠️</div>
-            <p className="text-red-700 font-medium">Dashboard Error</p>
-            <p className="text-red-600 text-sm mt-1">{error}</p>
+            <p
+              className={cn("text-red-700 font-medium", typography.body.normal)}
+            >
+              Dashboard Error
+            </p>
+            <p className={cn("text-red-600 mt-1", typography.body.small)}>
+              {error}
+            </p>
           </div>
         </div>
       </div>
@@ -187,13 +207,19 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({
   }
 
   return (
-    <div className={cn("simulation-dashboard space-y-6", className)}>
+    <div
+      className={cn("simulation-dashboard space-y-4 md:space-y-6", className)}
+    >
       {/* Dashboard Header */}
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">{title}</h1>
-        <p className="text-gray-600">{description}</p>
+        <h1 className={cn("text-gray-900 mb-2", typography.heading.h1)}>
+          {title}
+        </h1>
+        <p className={cn("text-gray-600", typography.body.normal)}>
+          {description}
+        </p>
         {data.length > 0 && (
-          <p className="text-sm text-gray-500 mt-2">
+          <p className={cn("text-gray-500 mt-2", typography.body.small)}>
             Last updated: Generation {stats.generation} • {data.length} data
             points
           </p>
@@ -202,7 +228,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({
 
       {/* Statistics Cards */}
       {data.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className={grids.stats.responsive}>
           <StatCard
             title="Total Population"
             value={stats.totalPopulation.toLocaleString()}
@@ -308,7 +334,13 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({
 
       {/* Footer Info */}
       {data.length > 0 && (
-        <div className="text-center text-sm text-gray-500 pt-4 border-t border-gray-200">
+        <div
+          className={cn(
+            "text-center pt-4 border-t border-gray-200",
+            typography.body.small,
+            "text-gray-500"
+          )}
+        >
           <p>
             Showing {data.length} generations of simulation data • Layout:{" "}
             {layout.charAt(0).toUpperCase() + layout.slice(1)}

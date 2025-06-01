@@ -18,7 +18,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { HelpCircle, Info } from "lucide-react";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
+import { HelpCircle, Info, Settings, Zap, Target } from "lucide-react";
 import {
   type SimulationParameters,
   validateSimulationParameters,
@@ -43,6 +44,13 @@ import {
 } from "@/lib/recovery-mechanisms";
 import { SimulationParametersApiSchema } from "@/lib/schemas/api";
 import { useNotifications as useNotificationsHook } from "@/hooks/useNotifications";
+import {
+  buttons,
+  grids,
+  padding,
+  typography,
+  formField,
+} from "@/lib/responsive";
 
 const defaultParameters: SimulationParameters = {
   populationSize: 10000,
@@ -425,6 +433,33 @@ export default function SimulationParametersForm() {
     }
   };
 
+  // Helper functions for nested parameter updates
+  const updateFitnessValue = (
+    key: keyof SimulationParameters["fitnessValues"],
+    value: number
+  ) => {
+    setParameters(prev => ({
+      ...prev,
+      fitnessValues: {
+        ...prev.fitnessValues,
+        [key]: value,
+      },
+    }));
+  };
+
+  const updateGridSize = (
+    key: keyof SimulationParameters["gridSize"],
+    value: number
+  ) => {
+    setParameters(prev => ({
+      ...prev,
+      gridSize: {
+        ...prev.gridSize,
+        [key]: value,
+      },
+    }));
+  };
+
   // Quick preset handlers
   const applyPreset = (
     category: "populationSize" | "generations" | "antibioticConcentration",
@@ -499,34 +534,28 @@ export default function SimulationParametersForm() {
           />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={grids.form.single}>
           {/* Basic Population Parameters */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                Population Parameters
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p>
-                      Configure the basic characteristics of your bacterial
-                      population including size and duration of the simulation.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <CardDescription>
-                Basic settings for the bacterial population
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
+          <CollapsibleSection
+            title="Population Parameters"
+            icon={<Settings className="h-5 w-5" />}
+            defaultOpen={true}
+            className="border border-gray-200 rounded-lg"
+            contentClassName={padding.card.responsive}
+          >
+            <div className="space-y-4">
+              <p
+                className={`${typography.body.small} text-muted-foreground mb-4`}
+              >
+                Configure the basic characteristics of your bacterial population
+                including size and duration of the simulation.
+              </p>
+
+              <div className={formField.container}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <Label
                     htmlFor="populationSize"
-                    className={`flex items-center gap-2 ${
+                    className={`${formField.label} ${
                       errors.populationSize ? "text-red-600" : ""
                     }`}
                   >
@@ -540,7 +569,7 @@ export default function SimulationParametersForm() {
                       </TooltipContent>
                     </Tooltip>
                   </Label>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     {Object.entries(recommendations.populationSize).map(
                       ([key, preset]) => (
                         <Tooltip key={key}>
@@ -549,7 +578,7 @@ export default function SimulationParametersForm() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-6 px-2 text-xs"
+                              className={buttons.preset.responsive}
                               onClick={() => applyPreset("populationSize", key)}
                             >
                               {preset.label}
@@ -585,7 +614,7 @@ export default function SimulationParametersForm() {
                 />
                 <div
                   id="populationSize-range"
-                  className="flex justify-between text-xs text-gray-500"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
                   role="group"
                   aria-label="Population size range"
                 >
@@ -600,7 +629,7 @@ export default function SimulationParametersForm() {
                     tabIndex={-1}
                   >
                     <AlertDescription
-                      className="text-sm"
+                      className={formField.error}
                       id="populationSize-error"
                       role="alert"
                     >
@@ -610,11 +639,11 @@ export default function SimulationParametersForm() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
+              <div className={formField.container}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <Label
                     htmlFor="generations"
-                    className={`flex items-center gap-2 ${
+                    className={`${formField.label} ${
                       errors.generations ? "text-red-600" : ""
                     }`}
                   >
@@ -628,7 +657,7 @@ export default function SimulationParametersForm() {
                       </TooltipContent>
                     </Tooltip>
                   </Label>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     {Object.entries(recommendations.generations).map(
                       ([key, preset]) => (
                         <Tooltip key={key}>
@@ -637,7 +666,7 @@ export default function SimulationParametersForm() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-6 px-2 text-xs"
+                              className={buttons.preset.responsive}
                               onClick={() => applyPreset("generations", key)}
                             >
                               {preset.label}
@@ -671,7 +700,7 @@ export default function SimulationParametersForm() {
                 />
                 <div
                   id="generations-range"
-                  className="flex justify-between text-xs text-gray-500"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
                   role="group"
                   aria-label="Generations range"
                 >
@@ -686,7 +715,7 @@ export default function SimulationParametersForm() {
                     tabIndex={-1}
                   >
                     <AlertDescription
-                      className="text-sm"
+                      className={formField.error}
                       id="generations-error"
                       role="alert"
                     >
@@ -695,35 +724,29 @@ export default function SimulationParametersForm() {
                   </Alert>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </CollapsibleSection>
 
           {/* Evolution Parameters */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                Evolution Parameters
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p>
-                      Control the mechanisms of bacterial evolution: spontaneous
-                      mutations and horizontal gene transfer between cells.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <CardDescription>
-                Settings for mutation and gene transfer mechanisms
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
+          <CollapsibleSection
+            title="Evolution Parameters"
+            icon={<Zap className="h-5 w-5" />}
+            defaultOpen={true}
+            className="border border-gray-200 rounded-lg"
+            contentClassName={padding.card.responsive}
+          >
+            <div className="space-y-4">
+              <p
+                className={`${typography.body.small} text-muted-foreground mb-4`}
+              >
+                Control the mechanisms of bacterial evolution: spontaneous
+                mutations and horizontal gene transfer between cells.
+              </p>
+
+              <div className={formField.container}>
                 <Label
                   htmlFor="mutationRate"
-                  className={`flex items-center gap-2 ${
+                  className={`${formField.label} ${
                     errors.mutationRate ? "text-red-600" : ""
                   }`}
                 >
@@ -760,7 +783,7 @@ export default function SimulationParametersForm() {
                 />
                 <div
                   id="mutationRate-range"
-                  className="flex justify-between text-xs text-gray-500"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
                   role="group"
                   aria-label="Mutation rate range"
                 >
@@ -775,7 +798,7 @@ export default function SimulationParametersForm() {
                     tabIndex={-1}
                   >
                     <AlertDescription
-                      className="text-sm"
+                      className={formField.error}
                       id="mutationRate-error"
                       role="alert"
                     >
@@ -785,10 +808,10 @@ export default function SimulationParametersForm() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className={formField.container}>
                 <Label
                   htmlFor="hgtRate"
-                  className={`flex items-center gap-2 ${
+                  className={`${formField.label} ${
                     errors.hgtRate ? "text-red-600" : ""
                   }`}
                 >
@@ -822,7 +845,7 @@ export default function SimulationParametersForm() {
                 />
                 <div
                   id="hgtRate-range"
-                  className="flex justify-between text-xs text-gray-500"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
                   role="group"
                   aria-label="HGT rate range"
                 >
@@ -837,7 +860,7 @@ export default function SimulationParametersForm() {
                     tabIndex={-1}
                   >
                     <AlertDescription
-                      className="text-sm"
+                      className={formField.error}
                       id="hgtRate-error"
                       role="alert"
                     >
@@ -846,35 +869,11 @@ export default function SimulationParametersForm() {
                   </Alert>
                 )}
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Antibiotic Parameters */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                Antibiotic Parameters
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p>
-                      Configure antibiotic treatment parameters including dosage
-                      and initial resistance levels in the population.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <CardDescription>
-                Antibiotic concentration and resistance settings
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
+              <div className={formField.container}>
                 <Label
                   htmlFor="initialResistanceFrequency"
-                  className={`flex items-center gap-2 ${
+                  className={`${formField.label} ${
                     errors.initialResistanceFrequency ? "text-red-600" : ""
                   }`}
                 >
@@ -892,7 +891,7 @@ export default function SimulationParametersForm() {
                 <Slider
                   id="initialResistanceFrequency"
                   min={0.001}
-                  max={0.5}
+                  max={0.1}
                   step={0.001}
                   value={[parameters.initialResistanceFrequency]}
                   onValueChange={value =>
@@ -900,7 +899,8 @@ export default function SimulationParametersForm() {
                   }
                   className="w-full"
                   aria-label={`Initial Resistance Frequency: ${formatPercentage(
-                    parameters.initialResistanceFrequency * 100
+                    parameters.initialResistanceFrequency,
+                    2
                   )}`}
                   aria-describedby={
                     errors.initialResistanceFrequency
@@ -911,12 +911,12 @@ export default function SimulationParametersForm() {
                 />
                 <div
                   id="initialResistanceFrequency-range"
-                  className="flex justify-between text-xs text-gray-500"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
                   role="group"
                   aria-label="Initial resistance frequency range"
                 >
                   <span>0.1%</span>
-                  <span>50%</span>
+                  <span>10%</span>
                 </div>
                 {errors.initialResistanceFrequency && (
                   <Alert
@@ -926,7 +926,7 @@ export default function SimulationParametersForm() {
                     tabIndex={-1}
                   >
                     <AlertDescription
-                      className="text-sm"
+                      className={formField.error}
                       id="initialResistanceFrequency-error"
                       role="alert"
                     >
@@ -935,12 +935,30 @@ export default function SimulationParametersForm() {
                   </Alert>
                 )}
               </div>
+            </div>
+          </CollapsibleSection>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
+          {/* Antibiotic Parameters */}
+          <CollapsibleSection
+            title="Antibiotic & Fitness Parameters"
+            icon={<Target className="h-5 w-5" />}
+            defaultOpen={true}
+            className="border border-gray-200 rounded-lg"
+            contentClassName={padding.card.responsive}
+          >
+            <div className="space-y-4">
+              <p
+                className={`${typography.body.small} text-muted-foreground mb-4`}
+              >
+                Configure antibiotic treatment parameters and fitness
+                characteristics for resistant and sensitive bacteria.
+              </p>
+
+              <div className={formField.container}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <Label
                     htmlFor="antibioticConcentration"
-                    className={`flex items-center gap-2 ${
+                    className={`${formField.label} ${
                       errors.antibioticConcentration ? "text-red-600" : ""
                     }`}
                   >
@@ -958,7 +976,7 @@ export default function SimulationParametersForm() {
                       </TooltipContent>
                     </Tooltip>
                   </Label>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     {Object.entries(
                       recommendations.antibioticConcentration
                     ).map(([key, preset]) => (
@@ -968,7 +986,7 @@ export default function SimulationParametersForm() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-6 px-2 text-xs"
+                            className={buttons.preset.responsive}
                             onClick={() =>
                               applyPreset("antibioticConcentration", key)
                             }
@@ -997,10 +1015,284 @@ export default function SimulationParametersForm() {
                     parameters.antibioticConcentration,
                     { decimals: 2 }
                   )} times`}
+                  aria-describedby={
+                    errors.antibioticConcentration
+                      ? "antibioticConcentration-error"
+                      : "antibioticConcentration-range"
+                  }
+                  aria-invalid={!!errors.antibioticConcentration}
                 />
+                <div
+                  id="antibioticConcentration-range"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
+                  role="group"
+                  aria-label="Antibiotic concentration range"
+                >
+                  <span>0.1x</span>
+                  <span>10x</span>
+                </div>
+                {errors.antibioticConcentration && (
+                  <Alert
+                    variant="destructive"
+                    className="py-2"
+                    ref={!firstErrorRef.current ? firstErrorRef : undefined}
+                    tabIndex={-1}
+                  >
+                    <AlertDescription
+                      className={formField.error}
+                      id="antibioticConcentration-error"
+                      role="alert"
+                    >
+                      {errors.antibioticConcentration}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
-            </CardContent>
-          </Card>
+
+              <div className={formField.container}>
+                <Label
+                  htmlFor="resistantFitness"
+                  className={`${formField.label} ${
+                    errors.resistantFitness ? "text-red-600" : ""
+                  }`}
+                >
+                  Resistant Fitness:{" "}
+                  {formatNumber(parameters.fitnessValues.resistantFitness, {
+                    decimals: 2,
+                  })}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm">
+                      <p>{helpText.resistantFitness}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </Label>
+                <Slider
+                  id="resistantFitness"
+                  min={0.5}
+                  max={1.5}
+                  step={0.05}
+                  value={[parameters.fitnessValues.resistantFitness]}
+                  onValueChange={value =>
+                    updateFitnessValue("resistantFitness", value[0])
+                  }
+                  className="w-full"
+                  aria-label={`Resistant Fitness: ${formatNumber(
+                    parameters.fitnessValues.resistantFitness,
+                    { decimals: 2 }
+                  )}`}
+                  aria-describedby={
+                    errors.resistantFitness
+                      ? "resistantFitness-error"
+                      : "resistantFitness-range"
+                  }
+                  aria-invalid={!!errors.resistantFitness}
+                />
+                <div
+                  id="resistantFitness-range"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
+                  role="group"
+                  aria-label="Resistant fitness range"
+                >
+                  <span>0.5</span>
+                  <span>1.5</span>
+                </div>
+                {errors.resistantFitness && (
+                  <Alert
+                    variant="destructive"
+                    className="py-2"
+                    ref={!firstErrorRef.current ? firstErrorRef : undefined}
+                    tabIndex={-1}
+                  >
+                    <AlertDescription
+                      className={formField.error}
+                      id="resistantFitness-error"
+                      role="alert"
+                    >
+                      {errors.resistantFitness}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              <div className={formField.container}>
+                <Label
+                  htmlFor="resistanceCost"
+                  className={`${formField.label} ${
+                    errors.resistanceCost ? "text-red-600" : ""
+                  }`}
+                >
+                  Resistance Cost:{" "}
+                  {formatNumber(parameters.fitnessValues.resistanceCost, {
+                    decimals: 2,
+                  })}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm">
+                      <p>{helpText.resistanceCost}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </Label>
+                <Slider
+                  id="resistanceCost"
+                  min={0}
+                  max={0.5}
+                  step={0.01}
+                  value={[parameters.fitnessValues.resistanceCost]}
+                  onValueChange={value =>
+                    updateFitnessValue("resistanceCost", value[0])
+                  }
+                  className="w-full"
+                  aria-label={`Resistance Cost: ${formatNumber(
+                    parameters.fitnessValues.resistanceCost,
+                    { decimals: 2 }
+                  )}`}
+                  aria-describedby={
+                    errors.resistanceCost
+                      ? "resistanceCost-error"
+                      : "resistanceCost-range"
+                  }
+                  aria-invalid={!!errors.resistanceCost}
+                />
+                <div
+                  id="resistanceCost-range"
+                  className={`flex justify-between ${typography.body.small} text-gray-500`}
+                  role="group"
+                  aria-label="Resistance cost range"
+                >
+                  <span>0</span>
+                  <span>0.5</span>
+                </div>
+                {errors.resistanceCost && (
+                  <Alert
+                    variant="destructive"
+                    className="py-2"
+                    ref={!firstErrorRef.current ? firstErrorRef : undefined}
+                    tabIndex={-1}
+                  >
+                    <AlertDescription
+                      className={formField.error}
+                      id="resistanceCost-error"
+                      role="alert"
+                    >
+                      {errors.resistanceCost}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className={formField.container}>
+                  <Label
+                    htmlFor="gridWidth"
+                    className={`${formField.label} ${
+                      errors.gridWidth ? "text-red-600" : ""
+                    }`}
+                  >
+                    Grid Width: {parameters.gridSize.width}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm">
+                        <p>{helpText.gridWidth}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </Label>
+                  <Slider
+                    id="gridWidth"
+                    min={50}
+                    max={200}
+                    step={10}
+                    value={[parameters.gridSize.width]}
+                    onValueChange={value => updateGridSize("width", value[0])}
+                    className="w-full"
+                    aria-label={`Grid Width: ${parameters.gridSize.width}`}
+                    aria-describedby={
+                      errors.gridWidth ? "gridWidth-error" : "gridWidth-range"
+                    }
+                    aria-invalid={!!errors.gridWidth}
+                  />
+                  <div
+                    id="gridWidth-range"
+                    className={`flex justify-between ${typography.body.small} text-gray-500`}
+                    role="group"
+                    aria-label="Grid width range"
+                  >
+                    <span>50</span>
+                    <span>200</span>
+                  </div>
+                </div>
+
+                <div className={formField.container}>
+                  <Label
+                    htmlFor="gridHeight"
+                    className={`${formField.label} ${
+                      errors.gridHeight ? "text-red-600" : ""
+                    }`}
+                  >
+                    Grid Height: {parameters.gridSize.height}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm">
+                        <p>{helpText.gridHeight}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </Label>
+                  <Slider
+                    id="gridHeight"
+                    min={50}
+                    max={200}
+                    step={10}
+                    value={[parameters.gridSize.height]}
+                    onValueChange={value => updateGridSize("height", value[0])}
+                    className="w-full"
+                    aria-label={`Grid Height: ${parameters.gridSize.height}`}
+                    aria-describedby={
+                      errors.gridHeight
+                        ? "gridHeight-error"
+                        : "gridHeight-range"
+                    }
+                    aria-invalid={!!errors.gridHeight}
+                  />
+                  <div
+                    id="gridHeight-range"
+                    className={`flex justify-between ${typography.body.small} text-gray-500`}
+                    role="group"
+                    aria-label="Grid height range"
+                  >
+                    <span>50</span>
+                    <span>200</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CollapsibleSection>
+        </div>
+
+        {/* Form Actions */}
+        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t">
+          <Button
+            type="submit"
+            className={`${buttons.touch.medium} flex-1 sm:flex-initial`}
+            disabled={Object.keys(errors).length > 0}
+          >
+            Start Simulation
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleReset}
+            className={`${buttons.touch.medium} flex-1 sm:flex-initial`}
+          >
+            Reset to Defaults
+          </Button>
         </div>
       </form>
     </TooltipProvider>
