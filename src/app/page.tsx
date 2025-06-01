@@ -27,7 +27,7 @@ const ResultsDashboard = dynamic(
 
 export default function Home() {
   const [currentTab, setCurrentTab] = useState("parameters");
-  const [simulationStatus, setSimulationStatus] = useState<
+  const [simulationStatus] = useState<
     "idle" | "running" | "completed" | "error"
   >("idle");
 

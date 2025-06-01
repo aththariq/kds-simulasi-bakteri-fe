@@ -1,13 +1,6 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -19,7 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
-import { HelpCircle, Info, Settings, Zap, Target } from "lucide-react";
+import { HelpCircle, Settings, Zap, Target } from "lucide-react";
 import {
   type SimulationParameters,
   validateSimulationParameters,
@@ -159,20 +152,6 @@ export default function SimulationParametersForm() {
       });
     }
 
-    // Start auto-save
-    autoSaveManager.startAutoSave(
-      {
-        key: FORM_ID,
-        interval: 30000, // Save every 30 seconds
-        maxVersions: 5,
-        enabled: isAutoSaveEnabled,
-      },
-      () => parameters,
-      () => {
-        console.log("Form auto-saved");
-      }
-    );
-
     // Register form features for graceful degradation
     const browserSupport = RecoveryUtils.checkBrowserSupport();
 
@@ -217,14 +196,9 @@ export default function SimulationParametersForm() {
         }
       );
     }
+  }, [addNotification, isAutoSaveEnabled]);
 
-    // Cleanup on unmount
-    return () => {
-      autoSaveManager.stopAutoSave(FORM_ID);
-    };
-  }, [addNotification, announceToScreenReader, isAutoSaveEnabled, parameters]);
-
-  // Track unsaved changes
+  // Track unsaved changes and handle auto-save
   useEffect(() => {
     const hasChanges =
       JSON.stringify(parameters) !== JSON.stringify(defaultParameters);

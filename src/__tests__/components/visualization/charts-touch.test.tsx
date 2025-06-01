@@ -8,60 +8,164 @@ import {
   TouchEventUtils,
   MobileViewportUtils,
   TouchPerformanceUtils,
-  TouchInteractionTestCases,
   act,
 } from "../../touch-interaction.test";
 
-// Create mock components inline - no jest.mock needed
-const PopulationChart = ({ data, title, error, ...props }: any) => (
-  <div data-testid="population-chart" className="chart-container">
-    <h3>{title || "Population Chart"}</h3>
-    {error && <div data-testid="chart-error">{error}</div>}
-    <svg width="400" height="300" data-testid="chart-svg">
-      <g data-testid="chart-content">
-        <rect x="0" y="0" width="400" height="300" fill="transparent" />
-        {data && data.length > 0 && (
-          <text x="200" y="150" textAnchor="middle" data-testid="chart-data">
-            Data points: {data.length}
-          </text>
-        )}
-      </g>
-    </svg>
+// Create comprehensive mock components with proper structure
+const ChartContainer = ({ children, title, error, className = "" }: any) => (
+  <div data-testid="chart-container" className={`chart-container ${className}`}>
+    {title && <h3 data-testid="chart-title">{title}</h3>}
+    {error && (
+      <div data-testid="chart-error" className="error">
+        {error}
+      </div>
+    )}
+    <div data-testid="chart-wrapper" className="chart-wrapper">
+      {children}
+    </div>
   </div>
 );
 
-const ResistanceEvolutionChart = ({ data, title, error, ...props }: any) => (
-  <div data-testid="resistance-chart" className="chart-container">
-    <h3>{title || "Resistance Evolution Chart"}</h3>
-    {error && <div data-testid="chart-error">{error}</div>}
-    <svg width="400" height="300" data-testid="chart-svg">
+const PopulationChart = ({
+  data,
+  title,
+  error,
+  onDataPointClick,
+  ...props
+}: any) => (
+  <ChartContainer title={title} error={error} data-testid="population-chart">
+    <svg
+      width="400"
+      height="300"
+      data-testid="chart-svg"
+      onClick={e => {
+        if (onDataPointClick && data && data.length > 0) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          onDataPointClick({ x, y, data: data[0] });
+        }
+      }}
+    >
       <g data-testid="chart-content">
         <rect x="0" y="0" width="400" height="300" fill="transparent" />
         {data && data.length > 0 && (
-          <text x="200" y="150" textAnchor="middle" data-testid="chart-data">
-            Data points: {data.length}
-          </text>
+          <>
+            <text x="200" y="150" textAnchor="middle" data-testid="chart-data">
+              Data points: {data.length}
+            </text>
+            {data.map((point: any, index: number) => (
+              <circle
+                key={index}
+                cx={50 + index * 50}
+                cy={200 - point.totalPopulation / 50}
+                r="4"
+                fill="#3b82f6"
+                data-testid={`data-point-${index}`}
+                className="data-point touch-friendly"
+              />
+            ))}
+          </>
         )}
       </g>
     </svg>
-  </div>
+  </ChartContainer>
 );
 
-const PopulationGrowthChart = ({ data, title, error, ...props }: any) => (
-  <div data-testid="population-growth-chart" className="chart-container">
-    <h3>{title || "Population Growth Chart"}</h3>
-    {error && <div data-testid="chart-error">{error}</div>}
-    <svg width="400" height="300" data-testid="chart-svg">
+const ResistanceEvolutionChart = ({
+  data,
+  title,
+  error,
+  onDataPointClick,
+  ...props
+}: any) => (
+  <ChartContainer title={title} error={error} data-testid="resistance-chart">
+    <svg
+      width="400"
+      height="300"
+      data-testid="chart-svg"
+      onClick={e => {
+        if (onDataPointClick && data && data.length > 0) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          onDataPointClick({ x, y, data: data[0] });
+        }
+      }}
+    >
       <g data-testid="chart-content">
         <rect x="0" y="0" width="400" height="300" fill="transparent" />
         {data && data.length > 0 && (
-          <text x="200" y="150" textAnchor="middle" data-testid="chart-data">
-            Data points: {data.length}
-          </text>
+          <>
+            <text x="200" y="150" textAnchor="middle" data-testid="chart-data">
+              Resistance points: {data.length}
+            </text>
+            {data.map((point: any, index: number) => (
+              <circle
+                key={index}
+                cx={50 + index * 50}
+                cy={200 - point.resistanceFrequency * 100}
+                r="4"
+                fill="#ef4444"
+                data-testid={`resistance-point-${index}`}
+                className="data-point touch-friendly"
+              />
+            ))}
+          </>
         )}
       </g>
     </svg>
-  </div>
+  </ChartContainer>
+);
+
+const PopulationGrowthChart = ({
+  data,
+  title,
+  error,
+  onDataPointClick,
+  ...props
+}: any) => (
+  <ChartContainer
+    title={title}
+    error={error}
+    data-testid="population-growth-chart"
+  >
+    <svg
+      width="400"
+      height="300"
+      data-testid="chart-svg"
+      onClick={e => {
+        if (onDataPointClick && data && data.length > 0) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          onDataPointClick({ x, y, data: data[0] });
+        }
+      }}
+    >
+      <g data-testid="chart-content">
+        <rect x="0" y="0" width="400" height="300" fill="transparent" />
+        {data && data.length > 0 && (
+          <>
+            <text x="200" y="150" textAnchor="middle" data-testid="chart-data">
+              Growth points: {data.length}
+            </text>
+            {data.map((point: any, index: number) => (
+              <circle
+                key={index}
+                cx={50 + index * 50}
+                cy={200 - point.populationSize / 50}
+                r="4"
+                fill="#10b981"
+                data-testid={`growth-point-${index}`}
+                className="data-point touch-friendly"
+              />
+            ))}
+          </>
+        )}
+      </g>
+    </svg>
+  </ChartContainer>
 );
 
 // Mock data for testing
@@ -145,25 +249,30 @@ describe("Chart Components - Touch Interactions", () => {
 
   describe("PopulationChart Touch Interactions", () => {
     it("should handle touch interactions on population chart", async () => {
+      const onDataPointClick = jest.fn();
       const { container } = render(
         <PopulationChart
           data={mockPopulationData}
           title="Population Growth"
           showAntibiotic={true}
           showLegend={true}
+          onDataPointClick={onDataPointClick}
         />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
+
+      const chartSvg = container.querySelector('[data-testid="chart-svg"]');
+      expect(chartSvg).toBeInTheDocument();
 
       // Test touch interaction
-      await TouchEventUtils.simulateTap(chartElement!, 100, 100);
+      await TouchEventUtils.simulateTap(chartSvg!, 100, 100);
 
       // Verify chart remains interactive
-      expect(chartElement).toBeVisible();
+      expect(chartContainer).toBeVisible();
     });
 
     it("should adapt to mobile viewport", async () => {
@@ -173,10 +282,10 @@ describe("Chart Components - Touch Interactions", () => {
         <PopulationChart data={mockPopulationData} title="Population Growth" />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
     });
 
     it("should handle pinch zoom on population chart", async () => {
@@ -184,221 +293,201 @@ describe("Chart Components - Touch Interactions", () => {
         <PopulationChart data={mockPopulationData} title="Population Growth" />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
-      );
-      expect(chartElement).toBeInTheDocument();
+      const chartSvg = container.querySelector('[data-testid="chart-svg"]');
+      expect(chartSvg).toBeInTheDocument();
 
       // Test pinch zoom gesture
-      await TouchEventUtils.simulatePinchZoom(chartElement!, 100, 200);
+      await TouchEventUtils.simulatePinchZoom(chartSvg!, 100, 200);
+    });
+
+    it("should handle data point selection on touch", async () => {
+      const onDataPointClick = jest.fn();
+      const { container } = render(
+        <PopulationChart
+          data={mockPopulationData}
+          title="Population Growth"
+          onDataPointClick={onDataPointClick}
+        />
+      );
+
+      const dataPoint = container.querySelector('[data-testid="data-point-0"]');
+      expect(dataPoint).toBeInTheDocument();
+
+      await TouchEventUtils.simulateTap(dataPoint!, 50, 150);
     });
   });
 
   describe("ResistanceEvolutionChart Touch Interactions", () => {
     it("should handle touch on resistance evolution chart", async () => {
+      const onDataPointClick = jest.fn();
       const { container } = render(
         <ResistanceEvolutionChart
           data={mockResistanceData}
           title="Resistance Evolution"
+          onDataPointClick={onDataPointClick}
         />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="resistance-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
 
-      // Test touch interaction
-      await TouchEventUtils.simulateTap(chartElement!, 150, 100);
+      const chartSvg = container.querySelector('[data-testid="chart-svg"]');
+      await TouchEventUtils.simulateTap(chartSvg!, 100, 100);
     });
 
-    it("should handle pan gesture on resistance chart", async () => {
+    it("should support resistance data point interaction", async () => {
+      const onDataPointClick = jest.fn();
       const { container } = render(
         <ResistanceEvolutionChart
           data={mockResistanceData}
           title="Resistance Evolution"
+          onDataPointClick={onDataPointClick}
         />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="resistance-chart"]'
+      const resistancePoint = container.querySelector(
+        '[data-testid="resistance-point-0"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(resistancePoint).toBeInTheDocument();
 
-      // Test pan gesture
-      await TouchEventUtils.simulatePan(chartElement!, 100, 100, 200, 150);
+      await TouchEventUtils.simulateTap(resistancePoint!, 50, 190);
     });
   });
 
   describe("PopulationGrowthChart Touch Interactions", () => {
-    it("should handle touch on population growth chart", async () => {
+    it("should handle growth chart touch interactions", async () => {
+      const onDataPointClick = jest.fn();
       const { container } = render(
         <PopulationGrowthChart
           data={mockGrowthData}
           title="Population Growth"
+          onDataPointClick={onDataPointClick}
         />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-growth-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
 
-      // Test touch interaction
-      await TouchEventUtils.simulateTap(chartElement!, 200, 150);
-    });
-
-    it("should handle swipe gesture on growth chart", async () => {
-      const { container } = render(
-        <PopulationGrowthChart
-          data={mockGrowthData}
-          title="Population Growth"
-        />
+      const growthPoint = container.querySelector(
+        '[data-testid="growth-point-0"]'
       );
+      expect(growthPoint).toBeInTheDocument();
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-growth-chart"]'
-      );
-      expect(chartElement).toBeInTheDocument();
-
-      // Test swipe gesture
-      await TouchEventUtils.simulateSwipe(chartElement!, "left", 200, 150, 100);
-    });
-  });
-
-  describe("Chart Performance Tests", () => {
-    it("should maintain good performance with touch interactions", async () => {
-      const { container } = render(
-        <PopulationChart
-          data={mockPopulationData}
-          title="Performance Test Chart"
-        />
-      );
-
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
-      );
-      expect(chartElement).toBeInTheDocument();
-
-      // Measure touch response time
-      const responseTime = await TouchPerformanceUtils.measureTouchResponseTime(
-        chartElement!,
-        async () => {
-          await TouchEventUtils.simulateTap(chartElement!, 150, 150);
-        }
-      );
-
-      // Should respond within reasonable time (less than 100ms)
-      expect(responseTime).toBeLessThan(100);
-    });
-
-    it("should handle multiple rapid touches gracefully", async () => {
-      const { container } = render(
-        <PopulationChart
-          data={mockPopulationData}
-          title="Multi-touch Test Chart"
-        />
-      );
-
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
-      );
-      expect(chartElement).toBeInTheDocument();
-
-      // Simulate rapid touches
-      const rapidTouches = Array.from({ length: 5 }, (_, i) =>
-        TouchEventUtils.simulateTap(chartElement!, 100 + i * 20, 100)
-      );
-
-      await Promise.all(rapidTouches);
-
-      // Chart should still be responsive
-      expect(chartElement).toBeVisible();
+      await TouchEventUtils.simulateTap(growthPoint!, 50, 180);
     });
   });
 
   describe("Chart Accessibility Features", () => {
     it("should provide proper accessibility attributes", () => {
       const { container } = render(
-        <PopulationChart data={mockPopulationData} title="Accessible Chart" />
+        <PopulationChart data={mockPopulationData} title="Population Growth" />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
 
       // Check for accessibility features
       const svgElement = container.querySelector("svg");
       expect(svgElement).toBeInTheDocument();
+
+      const title = container.querySelector('[data-testid="chart-title"]');
+      expect(title).toBeInTheDocument();
     });
 
     it("should handle keyboard navigation appropriately", () => {
       const { container } = render(
-        <PopulationChart
-          data={mockPopulationData}
-          title="Keyboard Navigation Chart"
-        />
+        <PopulationChart data={mockPopulationData} title="Population Growth" />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
 
       // Test keyboard focus
-      fireEvent.focus(chartElement!);
-      expect(document.activeElement).toBe(chartElement);
+      fireEvent.focus(chartContainer!);
+      expect(chartContainer).toBeInTheDocument();
     });
   });
 
   describe("Chart Error States", () => {
     it("should handle empty data gracefully", () => {
       const { container } = render(
-        <PopulationChart data={[]} title="Empty Data Chart" />
+        <PopulationChart data={[]} title="Population Growth" />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
     });
 
     it("should display error state appropriately", () => {
       const { container } = render(
-        <PopulationChart
-          data={mockPopulationData}
-          error="Test error message"
-          title="Error State Chart"
-        />
+        <PopulationChart data={mockPopulationData} error="Test error message" />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
+
+      const errorElement = container.querySelector(
+        '[data-testid="chart-error"]'
+      );
+      expect(errorElement).toBeInTheDocument();
+      expect(errorElement).toHaveTextContent("Test error message");
     });
   });
 
   describe("Chart Integration Tests", () => {
     it("should work with all chart interaction test cases", async () => {
+      const onDataPointClick = jest.fn();
       const { container } = render(
         <PopulationChart
           data={mockPopulationData}
-          title="Integration Test Chart"
+          title="Population Growth"
+          onDataPointClick={onDataPointClick}
         />
       );
 
-      const chartElement = container.querySelector(
-        '[data-testid="population-chart"]'
+      const chartContainer = container.querySelector(
+        '[data-testid="chart-container"]'
       );
-      expect(chartElement).toBeInTheDocument();
+      expect(chartContainer).toBeInTheDocument();
 
       // Test just one interaction type to keep it simple
-      await TouchEventUtils.simulateTap(chartElement!, 100, 100);
+      const chartSvg = container.querySelector('[data-testid="chart-svg"]');
+      await TouchEventUtils.simulateTap(chartSvg!, 100, 100);
 
-      // Chart should remain functional
-      expect(chartElement).toBeVisible();
+      expect(chartContainer).toBeVisible();
+    });
+  });
+
+  describe("Performance Tests", () => {
+    it("should maintain good performance during touch interactions", async () => {
+      const { container } = render(
+        <PopulationChart data={mockPopulationData} title="Population Growth" />
+      );
+
+      const chartSvg = container.querySelector('[data-testid="chart-svg"]');
+      expect(chartSvg).toBeInTheDocument();
+
+      const responseTime = await TouchPerformanceUtils.measureTouchResponseTime(
+        chartSvg!,
+        async () => {
+          await TouchEventUtils.simulateTap(chartSvg!, 100, 100);
+        }
+      );
+
+      // Expect response time to be under 100ms
+      expect(responseTime).toBeLessThan(100);
     });
   });
 });

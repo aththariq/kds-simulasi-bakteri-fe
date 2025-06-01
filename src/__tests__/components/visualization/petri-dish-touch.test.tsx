@@ -150,9 +150,7 @@ jest.mock("../../../components/visualization/hooks/usePetriDishData", () => ({
 }));
 
 // Import after mocking
-const {
-  PetriDishVisualization,
-} = require("../../../components/visualization/PetriDishVisualization");
+import { PetriDishVisualization } from "../../../components/visualization/PetriDishVisualization";
 
 // Mock data matching the actual PetriDishData interface
 const mockBacteriaData = [
