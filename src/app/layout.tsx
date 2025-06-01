@@ -1,22 +1,8 @@
-"use client";
-
 import { Geist, Geist_Mono } from "next/font/google";
-import { Toaster } from "sonner";
-import { StagewiseToolbar } from "@stagewise/toolbar-next";
-import { NotificationProvider } from "@/components/ui/notification-system";
-import { ErrorMonitoringUtils } from "@/lib/error-monitoring";
-import { initializeRecoveryMechanisms } from "@/lib/recovery-mechanisms";
+import { Metadata } from "next";
+import ClientLayout from "./client-layout";
+import { defaultMetadata } from "./metadata";
 import "./globals.css";
-import { useEffect } from "react";
-
-// Initialize recovery mechanisms on client side
-if (typeof window !== "undefined") {
-  import("@/lib/recovery-mechanisms").then(
-    ({ initializeRecoveryMechanisms }) => {
-      initializeRecoveryMechanisms();
-    }
-  );
-}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,62 +14,49 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const metadata: Metadata = {
+  ...defaultMetadata,
+  icons: {
+    icon: [
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      {
+        url: "/web-app-manifest-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+    ],
+    other: [
+      {
+        url: "/android-chrome-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/android-chrome-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+    ],
+  },
+  manifest: "/site.webmanifest",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const stagewiseConfig = {
-    plugins: [],
-  };
-
-  // Initialize error monitoring and recovery mechanisms
-  useEffect(() => {
-    // Initialize error monitoring system
-    ErrorMonitoringUtils.initialize({
-      environment: process.env.NODE_ENV as
-        | "development"
-        | "staging"
-        | "production",
-      enablePerformanceMonitoring: true,
-      enableUserInteractionTracking: true,
-      enableNetworkMonitoring: true,
-      enableConsoleCapture: process.env.NODE_ENV === "development",
-      sampleRate: process.env.NODE_ENV === "production" ? 0.1 : 1.0, // 10% sampling in production
-      maxBreadcrumbs: 100,
-      maxReports: 1000,
-      reportingInterval: 300000, // 5 minutes
-      release: process.env.REACT_APP_VERSION || "1.0.0",
-    });
-
-    // Initialize recovery mechanisms
-    initializeRecoveryMechanisms();
-
-    // Add initial breadcrumb
-    ErrorMonitoringUtils.addBreadcrumb("Application initialized", "info", {
-      userAgent: navigator.userAgent,
-      url: window.location.href,
-      timestamp: Date.now(),
-    });
-
-    // Cleanup function
-    return () => {
-      // Cleanup is handled by the monitoring system itself
-    };
-  }, []);
-
   return (
-    <html lang="en">
+    <html lang="id">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <NotificationProvider>
-          {children}
-          <Toaster />
-          {process.env.NODE_ENV === "development" && (
-            <StagewiseToolbar config={stagewiseConfig} />
-          )}
-        </NotificationProvider>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );
