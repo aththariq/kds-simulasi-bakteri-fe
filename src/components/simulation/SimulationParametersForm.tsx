@@ -30,7 +30,6 @@ import {
 } from "@/lib/error-handling";
 import {
   FormStateManager,
-  autoSaveManager,
   GracefulDegradationManager,
   RecoveryFlowManager,
   RecoveryUtils,
@@ -44,6 +43,10 @@ import {
   typography,
   formField,
 } from "@/lib/responsive";
+
+interface SimulationParametersFormProps {
+  onStartSimulation: (tab: string) => void;
+}
 
 const defaultParameters: SimulationParameters = {
   populationSize: 10000,
@@ -108,7 +111,9 @@ const recommendations = {
   },
 };
 
-export default function SimulationParametersForm() {
+export default function SimulationParametersForm({
+  onStartSimulation,
+}: SimulationParametersFormProps) {
   const { addNotification } = useNotificationsHook();
   const [parameters, setParameters] =
     useState<SimulationParameters>(defaultParameters);
@@ -278,6 +283,7 @@ export default function SimulationParametersForm() {
 
           // This will be connected to the backend simulation API
           // simulationAPI.startSimulation(validatedData);
+          onStartSimulation("simulation"); // Switch to the simulation tab
         },
         validationErrors => {
           // Error callback with recovery flow
@@ -376,34 +382,41 @@ export default function SimulationParametersForm() {
     if (key in parameterValidators) {
       const validator =
         parameterValidators[key as keyof typeof parameterValidators];
-      const error = validator(value);
+      const error = validator(value); // error is string | null
 
-      setErrors(prev => {
-        const newErrors = {
-          ...prev,
-          [key]: error || "",
-        };
-
-        // Clear validation errors for this field if no error
-        if (!error && validationErrors.length > 0) {
-          setValidationErrors(prev => prev.filter(err => err.field !== key));
-        }
-
-        // Announce validation status for screen readers
+      setErrors(prevErrors => {
+        const newErrors = { ...prevErrors };
         if (error) {
-          announceToScreenReader(`${key}: ${error}`);
-
-          // Show field-specific validation error
+          newErrors[key] = error;
+          announceToScreenReader(`${String(key)}: ${error}`);
+          // Display field-specific error notification
           ValidationErrorHandler.showFieldValidationError(
-            key.replace(/([A-Z])/g, " $1").toLowerCase(),
+            String(key)
+              .replace(/([A-Z])/g, " $1")
+              .toLowerCase(), // Format key for display
             error
           );
-        } else if (prev[key]) {
-          announceToScreenReader(`${key}: Value corrected.`);
+        } else {
+          // If the key exists in newErrors (i.e., it might have been an error previously),
+          // delete it to signify it's now valid.
+          if (Object.prototype.hasOwnProperty.call(newErrors, key)) {
+            delete newErrors[key];
+          }
+          // Announce correction only if there was a previous error for this key
+          if (prevErrors[key]) {
+            announceToScreenReader(`${String(key)}: Value corrected.`);
+          }
         }
-
         return newErrors;
       });
+
+      // If the field-specific validation passed (error is null),
+      // also remove any previous Zod-based validation errors for this field from the validationErrors array.
+      if (!error) {
+        setValidationErrors(prevValidationErrs =>
+          prevValidationErrs.filter(err => err.field !== key)
+        );
+      }
     }
   };
 
@@ -1045,7 +1058,7 @@ export default function SimulationParametersForm() {
                 </Label>
                 <Slider
                   id="resistantFitness"
-                  min={0.5}
+                  min={0.1}
                   max={1.5}
                   step={0.05}
                   value={[parameters.fitnessValues.resistantFitness]}
@@ -1070,7 +1083,7 @@ export default function SimulationParametersForm() {
                   role="group"
                   aria-label="Resistant fitness range"
                 >
-                  <span>0.5</span>
+                  <span>0.1</span>
                   <span>1.5</span>
                 </div>
                 {errors.resistantFitness && (

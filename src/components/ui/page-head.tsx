@@ -53,7 +53,7 @@ export function PageHead({ title, description, keywords = [] }: PageHeadProps) {
     if (ogDescription) {
       ogDescription.setAttribute("content", fullDescription);
     }
-  }, [fullTitle, fullDescription, fullKeywords]);
+  }, [fullTitle, fullDescription, fullKeywords, keywords]);
 
   return null;
 }

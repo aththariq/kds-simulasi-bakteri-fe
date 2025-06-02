@@ -1,5 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import { Metadata } from "next";
+import { Metadata, Viewport } from "next";
 import ClientLayout from "./client-layout";
 import { defaultMetadata } from "./metadata";
 import "./globals.css";
@@ -13,6 +13,12 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export const metadata: Metadata = {
   ...defaultMetadata,

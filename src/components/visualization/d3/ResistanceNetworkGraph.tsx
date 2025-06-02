@@ -103,8 +103,10 @@ export interface ResistanceNetworkGraphRef {
 }
 
 export interface ResistanceNetworkGraphProps {
-  data: ResistanceDataPoint[];
+  data?: ResistanceDataPoint[];
   patterns?: ResistancePattern[];
+  directNodes?: NetworkNode[];
+  directLinks?: NetworkLink[];
   config?: NetworkGraphConfig;
   onNodeClick?: (node: NetworkNode) => void;
   onLinkClick?: (link: NetworkLink) => void;
@@ -390,6 +392,8 @@ export const ResistanceNetworkGraph = forwardRef<
     {
       data,
       patterns = [],
+      directNodes,
+      directLinks,
       config = {},
       onNodeClick,
       onLinkClick,
@@ -478,6 +482,13 @@ export const ResistanceNetworkGraph = forwardRef<
 
     // Process network data with mobile optimization
     const { nodes, links } = useMemo(() => {
+      if (directNodes) {
+        return { nodes: directNodes, links: directLinks || [] };
+      }
+      if (!data) {
+        return { nodes: [], links: [] };
+      }
+
       const processedData = processNetworkData(data, patterns);
 
       if (deviceType === "mobile") {
@@ -496,7 +507,14 @@ export const ResistanceNetworkGraph = forwardRef<
       }
 
       return processedData;
-    }, [data, patterns, deviceType, optimizeDataForMobile]);
+    }, [
+      data,
+      patterns,
+      directNodes,
+      directLinks,
+      deviceType,
+      optimizeDataForMobile,
+    ]);
 
     // Set up responsive dimensions with mobile optimization
     useEffect(() => {

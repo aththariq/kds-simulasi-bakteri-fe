@@ -65,8 +65,13 @@ export interface ExportItem {
   description: string;
   size?: string;
   selected: boolean;
-  data?: any;
-  options?: any;
+  data?:
+    | PopulationDataPoint[]
+    | { chartRef: React.RefObject<HTMLElement> }
+    | Record<string, unknown>
+    | Session
+    | any;
+  options?: ExportOptions | VisualizationExportOptions | ParameterExportOptions;
 }
 
 // Export dialog props
@@ -276,20 +281,27 @@ export function ExportDialog({
     setExportItems(prev =>
       prev.map(item => (item.type === type ? { ...item, selected } : item))
     );
-  }, []);
-
-  // Individual export function
+  }, []); // Individual export function
   const performExport = useCallback(
-    async (type: string, data: any, options: any): Promise<ExportResult> => {
+    async (
+      type: string,
+      data: unknown,
+      options: unknown
+    ): Promise<ExportResult> => {
       switch (type) {
         case "data":
-          return await DataExportService.exportSimulationData(data, options);
-
-        case "visualization":
+          return await DataExportService.exportSimulationData(
+            data as PopulationDataPoint[],
+            options as ExportOptions
+          );
+        case "visualization": {
+          const visualizationData = data as {
+            chartRef: React.RefObject<HTMLElement>;
+          };
           const vizResult =
             await VisualizationExportService.exportVisualization(
-              data.chartRef.current,
-              options
+              visualizationData.chartRef.current,
+              options as VisualizationExportOptions
             );
 
           // Convert VisualizationExportResult to ExportResult
@@ -304,18 +316,23 @@ export function ExportDialog({
               exportTime: vizResult.metadata?.exportTime || 0,
             },
           };
+        }
 
         case "parameters":
-          return DataExportService.exportParameterSet(data, options);
-
-        case "session":
+          return DataExportService.exportParameterSet(
+            data as Record<string, unknown>,
+            options as ParameterExportOptions
+          );
+        case "session": {
           // Comprehensive session export
+          const sessionData = data as Session;
           const sessionResult = await DataExportService.exportSessionData(
-            data,
-            { [data.id]: simulationData },
+            sessionData,
+            { [sessionData.metadata.id]: simulationData },
             { format: "json", includeMetadata: true }
           );
           return sessionResult;
+        }
 
         default:
           throw new Error(`Unknown export type: ${type}`);
@@ -407,13 +424,12 @@ export function ExportDialog({
       );
     }
   }, [exportItems, performExport, onExportComplete]);
-
   // Quick export for single type
   const handleQuickExport = useCallback(
     async (type: string) => {
       const config = exportTypeConfigs[type as keyof typeof exportTypeConfigs];
-      let data: any;
-      let options: any;
+      let data: unknown;
+      let options: unknown;
 
       switch (type) {
         case "data":
@@ -729,7 +745,7 @@ export function ExportDialog({
                         onValueChange={value =>
                           setVisualizationOptions(prev => ({
                             ...prev,
-                            format: value as any,
+                            format: value as "png" | "svg" | "pdf" | "jpeg",
                           }))
                         }
                       >

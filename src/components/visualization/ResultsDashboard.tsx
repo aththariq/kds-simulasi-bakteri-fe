@@ -41,6 +41,8 @@ import { Separator } from "@/components/ui/separator";
 import { PopulationGrowthChart } from "./PopulationGrowthChart";
 import { MutationTrackingChart } from "./MutationTrackingChart";
 import { ResistanceEvolutionChart } from "./ResistanceEvolutionChart";
+import { ResistanceNetworkGraph } from "./d3/ResistanceNetworkGraph";
+import type { ResistanceDataPoint } from "@/lib/resistance-analysis";
 
 // Centralized data interface for synchronization
 interface DashboardData {
@@ -256,6 +258,35 @@ const samplePetriData = {
     physical_dimensions: [50, 50] as [number, number],
   },
   timestamp: Date.now(),
+};
+
+// Transform resistance data for network graph visualization
+const transformResistanceDataForNetwork = (
+  resistanceData: typeof sampleResistanceData
+): ResistanceDataPoint[] => {
+  return resistanceData.map((point, index) => ({
+    generation: point.generation,
+    resistanceFrequency: point.resistanceFrequency,
+    mutationRate: point.mutationRate,
+    selectedGenes: point.selectedGenes,
+    totalMutations: point.totalMutations,
+    fitnessAdvantage: point.fitnessAdvantage,
+    selectionPressure: point.selectionPressure,
+    timestamp: new Date().toISOString(),
+    // Add required fields for ResistanceDataPoint
+    totalPopulation: 1000 + Math.floor(Math.random() * 500),
+    resistantCount: Math.floor(point.resistanceFrequency * 1000),
+    // Generate mock gene frequencies for network visualization
+    geneFrequencies: {
+      [`ampR`]: Math.random() * 0.3 + 0.1,
+      [`tetR`]: Math.random() * 0.25 + 0.05,
+      [`strR`]: Math.random() * 0.2 + 0.1,
+      [`chlR`]: Math.random() * 0.15 + 0.05,
+    },
+    // These should be numbers, not arrays
+    hgtEvents: Math.floor(Math.random() * 5) + 1,
+    mutationEvents: point.totalMutations,
+  }));
 };
 
 export interface ResultsDashboardProps {
@@ -860,6 +891,50 @@ export default function ResultsDashboard({
             </CardHeader>
             <CardContent className="pt-0">
               <ResistanceGeneAnalysis data={dataState.data.resistance} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center space-x-2 text-lg">
+                <Grid3X3 className="h-5 w-5" />
+                <span>Resistance Gene Network</span>
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Interactive network showing relationships between resistance
+                genes and their co-occurrence patterns
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="h-[500px] w-full">
+                <ResistanceNetworkGraph
+                  data={transformResistanceDataForNetwork(
+                    dataState.data.resistance
+                  )}
+                  config={{
+                    width: 800,
+                    height: 480,
+                    showLabels: true,
+                    enableZoom: true,
+                    enableDrag: true,
+                    nodeMinSize: 8,
+                    nodeMaxSize: 25,
+                    linkMinWidth: 1,
+                    linkMaxWidth: 5,
+                    forceStrength: -200,
+                    linkDistance: 80,
+                    animationDuration: 750,
+                  }}
+                  onNodeClick={node => {
+                    console.log("Network node clicked:", node);
+                  }}
+                  onNodeHover={node => {
+                    console.log("Network node hovered:", node);
+                  }}
+                  loading={dataState.loading}
+                  error={dataState.error}
+                />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

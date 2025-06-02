@@ -389,7 +389,7 @@ export const ResistanceHeatmap = forwardRef<
         event.preventDefault();
         // Delegate to mobile hook's touch handlers for standardized behavior
         if (touchHandlers.onTouchStart) {
-          touchHandlers.onTouchStart(event as any);
+          touchHandlers.onTouchStart(event as unknown as React.TouchEvent);
         }
       },
       [deviceType, touchHandlers]
@@ -401,7 +401,7 @@ export const ResistanceHeatmap = forwardRef<
         event.preventDefault();
         // Delegate to mobile hook's touch handlers for standardized behavior
         if (touchHandlers.onTouchMove) {
-          touchHandlers.onTouchMove(event as any);
+          touchHandlers.onTouchMove(event as unknown as React.TouchEvent);
         }
       },
       [deviceType, touchHandlers]
@@ -413,7 +413,7 @@ export const ResistanceHeatmap = forwardRef<
         event.preventDefault();
         // Delegate to mobile hook's touch handlers for standardized behavior
         if (touchHandlers.onTouchEnd) {
-          touchHandlers.onTouchEnd(event as any);
+          touchHandlers.onTouchEnd();
         }
       },
       [deviceType, touchHandlers]

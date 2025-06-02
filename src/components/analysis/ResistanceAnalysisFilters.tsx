@@ -99,28 +99,31 @@ export const ResistanceAnalysisFilters: React.FC<
   const handleTimeFilterChange = useCallback(
     (updates: Partial<typeof filters.time>) => {
       onFiltersChange({
+        ...filters,
         time: { ...filters.time, ...updates },
       });
     },
-    [filters.time, onFiltersChange]
+    [filters, onFiltersChange]
   );
 
   const handleGeographicFilterChange = useCallback(
     (updates: Partial<typeof filters.geographic>) => {
       onFiltersChange({
+        ...filters,
         geographic: { ...filters.geographic, ...updates },
       });
     },
-    [filters.geographic, onFiltersChange]
+    [filters, onFiltersChange]
   );
 
   const handleMetricsFilterChange = useCallback(
     (updates: Partial<typeof filters.metrics>) => {
       onFiltersChange({
+        ...filters,
         metrics: { ...filters.metrics, ...updates },
       });
     },
-    [filters.metrics, onFiltersChange]
+    [filters, onFiltersChange]
   );
 
   const handleQuickFilter = useCallback(

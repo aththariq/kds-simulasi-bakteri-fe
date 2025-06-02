@@ -11,7 +11,6 @@ import React, { useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -22,20 +21,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  BarChart,
-  Bar,
   LineChart,
   Line,
   XAxis,
@@ -44,34 +31,15 @@ import {
   ResponsiveContainer,
   Legend,
   Brush,
-  ReferenceLine,
-  ScatterChart,
-  Scatter,
 } from "recharts";
-import {
-  Plus,
-  Minus,
-  BarChart3,
-  TrendingUp,
-  GitCompare,
-  Download,
-  Eye,
-  EyeOff,
-  Settings,
-  ChevronDown,
-  ChevronRight,
-  Info,
-} from "lucide-react";
+import { Plus, GitCompare, Download, Settings } from "lucide-react";
 import {
   DatasetComparison,
   ComparisonMetrics,
   ComparisonViewMode,
-  StatisticalTest,
-  UseResistanceAnalysisReturn,
 } from "@/types/analysis";
 import { ResistanceDataPoint } from "@/lib/resistance-analysis";
 import { useAnalysisStore } from "@/lib/analysis-state";
-import { useResistanceAnalysis } from "@/hooks/useResistanceAnalysis";
 
 // ============================
 // Component Props
@@ -115,10 +83,10 @@ const ComparisonChart: React.FC<ComparisonChartProps> = ({
     if (datasets.length === 0) return [];
 
     const maxLength = Math.max(...datasets.map(d => d.length));
-    const data = [];
+    const data: Array<Record<string, unknown>> = [];
 
     for (let i = 0; i < maxLength; i++) {
-      const point: any = { index: i };
+      const point: Record<string, unknown> = { index: i };
 
       datasets.forEach((dataset, idx) => {
         if (dataset[i]) {
@@ -375,14 +343,8 @@ export const ResistanceComparison: React.FC<ResistanceComparisonProps> = ({
   const [showStatistics, setShowStatistics] = useState(true);
   const [activeTab, setActiveTab] = useState("charts");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-  // Analysis hook
-  const analysis = useResistanceAnalysis(datasets.flat(), {
-    enableCaching: true,
-  });
-
   // Store
-  const { comparisons, addComparison, updateComparison } = useAnalysisStore();
+  const { comparisons, addComparison } = useAnalysisStore();
 
   // Handlers
   const handleBrushChange = useCallback((domain: [number, number] | null) => {
@@ -469,7 +431,6 @@ export const ResistanceComparison: React.FC<ResistanceComparisonProps> = ({
     const mean1 = values1.reduce((sum, val) => sum + val, 0) / values1.length;
     const mean2 = values2.reduce((sum, val) => sum + val, 0) / values2.length;
     const difference = mean1 - mean2;
-    const percentChange = mean2 !== 0 ? (difference / mean2) * 100 : 0;
 
     // Calculate correlation if same length
     let correlation = 0;

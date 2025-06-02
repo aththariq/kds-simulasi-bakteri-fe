@@ -139,6 +139,18 @@ const defaultAdvancedConfig: AdvancedPerformanceConfig = {
 
 // Device capability detection
 const detectDeviceCapabilities = (): DeviceCapabilities => {
+  // Browser environment check
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    // Return safe defaults for SSR
+    return {
+      memoryGB: 4,
+      cpuCores: 4,
+      estimatedPerformanceClass: "medium",
+      isHighDPI: false,
+      supportsConcurrency: false,
+    };
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const memory = (navigator as any).deviceMemory || 4; // GB
   const cpuCores = navigator.hardwareConcurrency || 4;

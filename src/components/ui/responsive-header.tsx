@@ -7,7 +7,13 @@ import { MobileNavigation } from "./mobile-navigation";
 export interface ResponsiveHeaderProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
-  simulationStatus?: "idle" | "running" | "completed" | "error";
+  simulationStatus?:
+    | "idle"
+    | "running"
+    | "paused"
+    | "completed"
+    | "error"
+    | "cancelled";
   className?: string;
 }
 

@@ -52,9 +52,10 @@ export const useDataPersistence = (
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [storageUsage, setStorageUsage] = useState(0);
-
   // Calculate storage usage
   const calculateStorageUsage = useCallback(() => {
+    if (typeof window === "undefined") return 0;
+
     try {
       let total = 0;
       for (const key in localStorage) {
@@ -103,9 +104,10 @@ export const useDataPersistence = (
     },
     [compress]
   );
-
   // Get list of saved sessions
   const getSavedSessions = useCallback(() => {
+    if (typeof window === "undefined") return [];
+
     try {
       const indexData = localStorage.getItem(`${storageKey}-index`);
       if (!indexData) return [];
@@ -115,10 +117,11 @@ export const useDataPersistence = (
       return [];
     }
   }, [storageKey]);
-
   // Save data to localStorage
   const saveData = useCallback(
     (data: PopulationDataPoint[], metadata: Record<string, unknown> = {}) => {
+      if (typeof window === "undefined") return;
+
       try {
         setIsAutoSaving(true);
 
@@ -179,10 +182,11 @@ export const useDataPersistence = (
       getSavedSessions,
     ]
   );
-
   // Load data from localStorage
   const loadData = useCallback(
     (sessionId?: string): PopulationDataPoint[] | null => {
+      if (typeof window === "undefined") return null;
+
       try {
         let dataKey: string;
 
@@ -217,10 +221,11 @@ export const useDataPersistence = (
     },
     [storageKey, decompressData, getSavedSessions]
   );
-
   // Delete a specific session
   const deleteSession = useCallback(
     (sessionId: string) => {
+      if (typeof window === "undefined") return;
+
       try {
         localStorage.removeItem(`${storageKey}-${sessionId}`);
 
@@ -241,9 +246,10 @@ export const useDataPersistence = (
     },
     [storageKey, getSavedSessions, calculateStorageUsage]
   );
-
   // Clear all stored data
   const clearStorage = useCallback(() => {
+    if (typeof window === "undefined") return;
+
     try {
       const keysToRemove: string[] = [];
       for (const key in localStorage) {
@@ -261,10 +267,14 @@ export const useDataPersistence = (
       console.error("Error clearing storage:", error);
     }
   }, [storageKey]);
-
   // Export data to file
   const exportData = useCallback(
     (data: PopulationDataPoint[], filename?: string) => {
+      if (typeof window === "undefined" || typeof document === "undefined") {
+        console.warn("Export not available in server environment");
+        return;
+      }
+
       try {
         const exportData: DataExportFormat = {
           version: "1.0",

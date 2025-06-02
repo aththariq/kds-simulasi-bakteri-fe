@@ -513,10 +513,9 @@ const CanvasPetriDishRenderer = forwardRef<
       }
 
       // Clear canvas
-      ctx.clearRect(0, 0, width, height);
-
-      // Set high DPI
-      const dpr = window.devicePixelRatio || 1;
+      ctx.clearRect(0, 0, width, height); // Set high DPI
+      const dpr =
+        typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       ctx.scale(dpr, dpr);

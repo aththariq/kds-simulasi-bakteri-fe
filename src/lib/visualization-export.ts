@@ -1,5 +1,8 @@
+"use client";
+
 import html2canvas from "html2canvas";
 import { toast } from "sonner";
+import React from "react";
 
 // Visualization export formats
 export type VisualizationExportFormat = "png" | "svg" | "pdf" | "jpeg";
@@ -72,9 +75,9 @@ export class VisualizationExportService {
     width: 1200,
     height: 800,
     backgroundColor: "#ffffff",
-    pixelRatio: window.devicePixelRatio || 1,
+    pixelRatio:
+      typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
   };
-
   /**
    * Export a visualization element as an image
    */
@@ -82,6 +85,19 @@ export class VisualizationExportService {
     elementOrSelector: HTMLElement | string,
     options: VisualizationExportOptions
   ): Promise<VisualizationExportResult> {
+    // Browser environment check
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return {
+        success: false,
+        error: "Export is only available in browser environment",
+        metadata: {
+          exportTime: 0,
+          format: options.format,
+          quality: { ...this.DEFAULT_QUALITY, ...options.quality },
+        },
+      };
+    }
+
     const startTime = Date.now();
 
     try {
@@ -162,7 +178,6 @@ export class VisualizationExportService {
       };
     }
   }
-
   /**
    * Export multiple visualizations as a collection
    */
@@ -173,6 +188,19 @@ export class VisualizationExportService {
       layout?: "grid" | "vertical" | "horizontal";
     }
   ): Promise<VisualizationExportResult> {
+    // Browser environment check
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return {
+        success: false,
+        error: "Export is only available in browser environment",
+        metadata: {
+          exportTime: 0,
+          format: options.format,
+          quality: { ...this.DEFAULT_QUALITY, ...options.quality },
+        },
+      };
+    }
+
     try {
       const container = await this.createVisualizationGrid(elements, options);
 
@@ -771,6 +799,3 @@ export const useVisualizationExport = (): UseVisualizationExportReturn => {
     clearError,
   };
 };
-
-// Import React for the hook
-import React from "react";

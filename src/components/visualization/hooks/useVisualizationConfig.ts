@@ -500,10 +500,9 @@ export const useVisualizationConfig = (
     preset = "standard",
     enablePersistence = true,
   } = options;
-
   // Initialize configuration
   const [config, setConfig] = useState<VisualizationConfig>(() => {
-    if (enablePersistence) {
+    if (enablePersistence && typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem(storageKey);
         if (stored) {
@@ -532,10 +531,9 @@ export const useVisualizationConfig = (
   useEffect(() => {
     setErrors(validationErrors);
   }, [validationErrors]);
-
   // Persist configuration to localStorage
   useEffect(() => {
-    if (enablePersistence && isDirty) {
+    if (enablePersistence && isDirty && typeof window !== "undefined") {
       try {
         localStorage.setItem(storageKey, JSON.stringify(config));
       } catch (error) {
@@ -552,12 +550,11 @@ export const useVisualizationConfig = (
       return newConfig;
     });
   }, []);
-
   // Reset to default configuration
   const resetConfig = useCallback(() => {
     setConfig(defaultConfig);
     setIsDirty(false);
-    if (enablePersistence) {
+    if (enablePersistence && typeof window !== "undefined") {
       localStorage.removeItem(storageKey);
     }
   }, [enablePersistence, storageKey]);
