@@ -30,6 +30,8 @@ interface SimulationState {
   resistantBacteriaCount: number;
   antibioticConcentration: number;
   errorMessage?: string;
+  mutationRate?: number;
+  selectionPressure?: number;
 }
 
 interface SimulationContextType {
@@ -63,6 +65,8 @@ export function SimulationProvider({
     bacteriaCount: 10000,
     resistantBacteriaCount: 100,
     antibioticConcentration: 0.5,
+    mutationRate: 0.01,
+    selectionPressure: 0.5,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -194,9 +198,19 @@ export function SimulationProvider({
 
       wsRef.current.onopen = () => {
         console.log("WebSocket connected");
+        const isAutoReconnection = reconnectAttempts.current > 0; // Check before resetting
+
         setIsConnected(true);
-        reconnectAttempts.current = 0;
-        toast.success("Connected to simulation server");
+        reconnectAttempts.current = 0; // Reset after checking
+
+        if (!isAutoReconnection) {
+          toast.success("Connected to simulation server");
+        } else {
+          // For automatic reconnections, we can log or use a more subtle notification
+          console.log("Successfully reconnected to simulation server (toast suppressed).");
+          // Optionally, you could use a different, less intrusive toast here, e.g.:
+          // toast.info("Reconnected to simulation server");
+        }
 
         // Start heartbeat mechanism
         if (heartbeatRef.current) {
@@ -328,8 +342,8 @@ export function SimulationProvider({
           data: {
             simulation_id: simulationId,
             initial_population_size: simulationState.bacteriaCount,
-            mutation_rate: 0.01,
-            selection_pressure: 0.5,
+            mutation_rate: simulationState.mutationRate,
+            selection_pressure: simulationState.selectionPressure,
             antibiotic_concentration: simulationState.antibioticConcentration,
             simulation_time: simulationState.totalGenerations,
           },
@@ -361,6 +375,8 @@ export function SimulationProvider({
     simulationState.totalGenerations,
     simulationState.bacteriaCount,
     simulationState.antibioticConcentration,
+    simulationState.mutationRate,
+    simulationState.selectionPressure,
   ]);
 
   const handleStart = useCallback(() => {

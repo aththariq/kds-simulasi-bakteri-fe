@@ -31,10 +31,10 @@ export interface WebSocketClientConfig {
 const DEFAULT_WS_CONFIG: WebSocketClientConfig = {
   url: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws",
   protocols: [],
-  reconnectAttempts: 5,
-  reconnectDelay: 1000,
-  heartbeatInterval: 30000,
-  messageTimeout: 10000,
+  reconnectAttempts: 3, // Reduced from 5 to prevent excessive retries
+  reconnectDelay: 2000, // Increased initial delay to 2 seconds
+  heartbeatInterval: 60000, // Increased to 60 seconds to match backend
+  messageTimeout: 15000, // Increased timeout for slower connections
   validateMessages: true,
 };
 
@@ -81,6 +81,8 @@ export class WebSocketClient {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
+  private lastConnectionTime = 0; // Track when last connection was established
+  private connectionStabilityThreshold = 5000; // Minimum time for stable connection (5s)
 
   constructor(config: Partial<WebSocketClientConfig> = {}) {
     this.config = { ...DEFAULT_WS_CONFIG, ...config };
@@ -245,10 +247,10 @@ export class WebSocketClient {
   // Setup WebSocket event listeners
   private setupSocketEventListeners(): void {
     if (!this.socket) return;
-
     this.socket.onopen = () => {
       this.setState(ConnectionState.CONNECTED);
       this.reconnectAttempts = 0;
+      this.lastConnectionTime = Date.now(); // Track connection time
       this.errorHandler.resetReconnectAttempts();
       this.startHeartbeat();
       this.flushMessageQueue();
@@ -355,9 +357,7 @@ export class WebSocketClient {
 
     // Attempt reconnection
     this.attemptReconnection();
-  }
-
-  // Handle WebSocket disconnection
+  } // Handle WebSocket disconnection
   private handleDisconnection(event: CloseEvent): void {
     this.setState(ConnectionState.DISCONNECTED);
     this.clearHeartbeat();
@@ -369,8 +369,12 @@ export class WebSocketClient {
       wasClean: event.wasClean,
     });
 
+    // Handle different close codes appropriately
+    const isCleanClose = event.code === 1000 || event.code === 1001;
+    const isServerShutdown = event.code === 1001;
+
     // Don't show notification for clean disconnections
-    if (event.code !== 1000 && event.code !== 1001) {
+    if (!isCleanClose) {
       notifications.warning({
         title: "Connection Lost",
         description: "Lost connection to the simulation server.",
@@ -378,14 +382,35 @@ export class WebSocketClient {
       });
     }
 
-    this.handlers.onDisconnect?.(event.reason);
-
-    // Attempt reconnection for unexpected disconnections
-    if (event.code !== 1000 && event.code !== 1001) {
-      this.attemptReconnection();
+    this.handlers.onDisconnect?.(event.reason); // Only attempt reconnection for unexpected disconnections
+    // Avoid reconnecting on clean shutdowns or explicit client disconnects
+    if (
+      !isCleanClose &&
+      !isServerShutdown &&
+      this.state !== ConnectionState.FAILED
+    ) {
+      // Check if connection was stable enough to warrant reconnection
+      const connectionDuration = Date.now() - this.lastConnectionTime;
+      if (connectionDuration < this.connectionStabilityThreshold) {
+        // Connection was too short, increase delay before reconnection
+        console.warn(
+          `Connection lasted only ${connectionDuration}ms, delaying reconnection`
+        );
+        setTimeout(() => {
+          if (this.state === ConnectionState.DISCONNECTED) {
+            this.attemptReconnection();
+          }
+        }, 3000); // Wait 3 seconds for unstable connections
+      } else {
+        // Normal reconnection for stable connections
+        setTimeout(() => {
+          if (this.state === ConnectionState.DISCONNECTED) {
+            this.attemptReconnection();
+          }
+        }, 1000);
+      }
     }
   }
-
   // Attempt to reconnect
   private async attemptReconnection(): Promise<void> {
     if (this.reconnectAttempts >= this.config.reconnectAttempts) {
@@ -407,13 +432,19 @@ export class WebSocketClient {
     this.setState(ConnectionState.RECONNECTING);
     this.reconnectAttempts++;
 
-    const delay =
-      this.config.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    // More conservative exponential backoff
+    const baseDelay = this.config.reconnectDelay;
+    const exponentialDelay =
+      baseDelay * Math.pow(1.5, this.reconnectAttempts - 1);
+    const maxDelay = 30000; // Cap at 30 seconds
+    const delay = Math.min(exponentialDelay, maxDelay);
 
     notifications.info({
       title: "Reconnecting",
-      description: `Attempting to reconnect... (${this.reconnectAttempts}/${this.config.reconnectAttempts})`,
-      duration: 3000,
+      description: `Attempting to reconnect in ${Math.round(
+        delay / 1000
+      )}s... (${this.reconnectAttempts}/${this.config.reconnectAttempts})`,
+      duration: Math.min(delay, 5000),
     });
 
     this.reconnectTimeout = setTimeout(async () => {
