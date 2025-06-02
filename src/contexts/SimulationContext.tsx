@@ -4,9 +4,9 @@ import React, {
   createContext,
   useContext,
   useState,
+  useEffect,
   useCallback,
   useRef,
-  useEffect,
 } from "react";
 import { toast } from "sonner";
 
@@ -60,95 +60,220 @@ export function SimulationProvider({
     progress: 0,
     elapsedTime: 0,
     estimatedTimeRemaining: 0,
-    bacteriaCount: 1000,
-    resistantBacteriaCount: 0,
+    bacteriaCount: 10000,
+    resistantBacteriaCount: 100,
     antibioticConcentration: 0.5,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
 
-  // WebSocket connection
+  const processWebSocketMessage = useCallback((data: any) => {
+    console.log("WebSocket message received:", data);
+
+    // Handle different message types with improved compatibility
+    const messageType = data.type?.toUpperCase() || data.type;
+
+    switch (messageType) {
+      case "CONNECTION_ESTABLISHED":
+        console.log("Connection established:", data);
+        setIsConnected(true);
+        reconnectAttempts.current = 0;
+        break;
+
+      case "SIMULATION_UPDATE":
+      case "SIMULATION_STARTED":
+      case "STATUS_UPDATE":
+        // Handle both "payload" and "data" field names
+        const payload = data.payload || data.data || {};
+
+        setSimulationState(prev => {
+          // Show notification for significant changes
+          const newResistantCount =
+            payload.resistantBacteriaCount ||
+            payload.resistantCount ||
+            payload.resistant_count ||
+            0;
+
+          if (newResistantCount > prev.resistantBacteriaCount * 1.5) {
+            toast.warning(
+              "Significant increase in resistant bacteria detected!"
+            );
+          }
+
+          return {
+            ...prev,
+            ...payload,
+            // Ensure we get updated bacteria data
+            bacteriaCount:
+              payload.bacteriaCount ||
+              payload.totalPopulation ||
+              payload.total_population ||
+              prev.bacteriaCount,
+            resistantBacteriaCount:
+              payload.resistantBacteriaCount ||
+              payload.resistantCount ||
+              payload.resistant_count ||
+              prev.resistantBacteriaCount,
+            // Update progress based on current generation
+            progress:
+              payload.progress ||
+              (payload.currentGeneration && payload.totalGenerations
+                ? (payload.currentGeneration / payload.totalGenerations) * 100
+                : payload.generation && payload.max_generations
+                ? (payload.generation / payload.max_generations) * 100
+                : prev.progress),
+            // Update current generation
+            currentGeneration:
+              payload.currentGeneration ||
+              payload.generation ||
+              prev.currentGeneration,
+            // Update total generations if provided
+            totalGenerations:
+              payload.totalGenerations ||
+              payload.max_generations ||
+              prev.totalGenerations,
+            // Update status if provided
+            status: payload.status || prev.status,
+          };
+        });
+        break;
+
+      case "ERROR":
+        console.error("WebSocket error message:", data);
+        toast.error(data.error || "Simulation error occurred");
+        setSimulationState(prev => ({
+          ...prev,
+          status: "error",
+          errorMessage: data.error || "Unknown error",
+        }));
+        break;
+
+      case "PING":
+        // Respond to heartbeat ping
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              type: "PONG",
+              timestamp: new Date().toISOString(),
+              client_id: "frontend_client",
+            })
+          );
+        }
+        break;
+
+      case "PONG":
+        // Heartbeat response received
+        console.log("Heartbeat response received");
+        break;
+
+      default:
+        console.log("Unhandled message type:", messageType, data);
+    }
+  }, []);
+
   const connectWebSocket = useCallback(() => {
-    // Only connect WebSocket in browser environment
     if (typeof window === "undefined") return;
 
     try {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
-      wsRef.current = new WebSocket(`${wsUrl}/ws/simulation`);
+      // Close existing connection if any
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+
+      const wsUrl =
+        process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws/simulation";
+      console.log("Connecting to WebSocket:", wsUrl);
+
+      wsRef.current = new WebSocket(wsUrl);
 
       wsRef.current.onopen = () => {
         console.log("WebSocket connected");
         setIsConnected(true);
+        reconnectAttempts.current = 0;
         toast.success("Connected to simulation server");
+
+        // Start heartbeat mechanism
+        if (heartbeatRef.current) {
+          clearInterval(heartbeatRef.current);
+        }
+        heartbeatRef.current = setInterval(() => {
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(
+              JSON.stringify({
+                type: "PING",
+                timestamp: new Date().toISOString(),
+                client_id: "frontend_client",
+              })
+            );
+          }
+        }, 30000); // Ping every 30 seconds
       };
 
       wsRef.current.onmessage = event => {
         try {
-          const data = JSON.parse(event.data);
-          console.log("WebSocket message received:", data);
+          let data;
 
-          // Handle both "SIMULATION_UPDATE" and "simulation_update" message types
-          if (data.type === "SIMULATION_UPDATE" || data.type === "simulation_update") {
-            // Handle both "payload" and "data" field names
-            const payload = data.payload || data.data || {};
-            
-            setSimulationState(prev => {
-              // Tampilkan notifikasi saat ada perubahan signifikan
-              const newResistantCount = payload.resistantBacteriaCount || 
-                                      payload.resistantCount || 
-                                      payload.resistant_count || 0;
-              
-              if (newResistantCount > prev.resistantBacteriaCount * 1.5) {
-                toast.warning(
-                  "Significant increase in resistant bacteria detected!"
-                );
+          // Handle both text and binary messages
+          if (event.data instanceof Blob) {
+            // Convert Blob to text first
+            const reader = new FileReader();
+            reader.onload = () => {
+              try {
+                data = JSON.parse(reader.result as string);
+                processWebSocketMessage(data);
+              } catch (error) {
+                console.error("Error parsing Blob as JSON:", error);
               }
-
-              return {
-                ...prev,
-                ...payload,
-                // Memastikan kita mendapatkan data bakteri yang diperbarui
-                bacteriaCount:
-                  payload.bacteriaCount ||
-                  payload.totalPopulation ||
-                  payload.total_population ||
-                  prev.bacteriaCount,
-                resistantBacteriaCount:
-                  payload.resistantBacteriaCount ||
-                  payload.resistantCount ||
-                  payload.resistant_count ||
-                  prev.resistantBacteriaCount,
-                // Perbarui juga progress berdasarkan generasi saat ini
-                progress:
-                  payload.progress ||
-                  (payload.currentGeneration && payload.totalGenerations
-                    ? (payload.currentGeneration / payload.totalGenerations) * 100
-                    : payload.generation && payload.max_generations
-                    ? (payload.generation / payload.max_generations) * 100
-                    : prev.progress),
-                // Update current generation
-                currentGeneration:
-                  payload.currentGeneration ||
-                  payload.generation ||
-                  prev.currentGeneration,
-                // Update total generations if provided
-                totalGenerations:
-                  payload.totalGenerations ||
-                  payload.max_generations ||
-                  prev.totalGenerations,
-              };
-            });
+            };
+            reader.readAsText(event.data);
+            return;
+          } else if (typeof event.data === "string") {
+            data = JSON.parse(event.data);
+          } else {
+            console.warn("Received unknown data type:", typeof event.data);
+            return;
           }
+
+          processWebSocketMessage(data);
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
         }
       };
 
-      wsRef.current.onclose = () => {
-        console.log("WebSocket disconnected");
+      wsRef.current.onclose = event => {
+        console.log("WebSocket disconnected:", event.code, event.reason);
         setIsConnected(false);
-        toast.error("Disconnected from simulation server");
+
+        // Clear heartbeat
+        if (heartbeatRef.current) {
+          clearInterval(heartbeatRef.current);
+          heartbeatRef.current = null;
+        }
+
+        // Attempt reconnection with exponential backoff
+        if (reconnectAttempts.current < maxReconnectAttempts) {
+          const delay = Math.min(
+            1000 * Math.pow(2, reconnectAttempts.current),
+            30000
+          );
+          reconnectAttempts.current++;
+
+          console.log(
+            `Attempting reconnection ${reconnectAttempts.current}/${maxReconnectAttempts} in ${delay}ms`
+          );
+
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connectWebSocket();
+          }, delay);
+        } else {
+          toast.error("Failed to maintain connection to simulation server");
+        }
       };
 
       wsRef.current.onerror = error => {
@@ -160,16 +285,45 @@ export function SimulationProvider({
       console.error("Failed to connect WebSocket:", error);
       toast.error("Failed to connect to simulation server");
     }
+  }, [processWebSocketMessage]);
+
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
   }, []);
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    connectWebSocket();
+    return cleanup;
+  }, [connectWebSocket, cleanup]);
+
   // Start simulation
   const sendStartMessage = useCallback(() => {
     try {
       // Generate a unique simulation ID
-      const simulationId = `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+      const simulationId = `sim_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
       wsRef.current?.send(
         JSON.stringify({
-          type: "simulation_start",
+          type: "SIMULATION_START", // Use uppercase to match backend protocol
           simulation_id: simulationId,
           data: {
             simulation_id: simulationId,
@@ -280,7 +434,8 @@ export function SimulationProvider({
         ...prev,
         status: "cancelled",
         progress: 0,
-        estimatedTimeRemaining: 0,
+        currentGeneration: 0,
+        elapsedTime: 0,
       }));
 
       if (timerRef.current) {
@@ -295,29 +450,17 @@ export function SimulationProvider({
     }
   }, []);
 
-  // Initialize WebSocket connection on mount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
-
-  const contextValue: SimulationContextType = {
-    isConnected,
-    simulationState,
-    handleStart,
-    handlePause,
-    handleCancel,
-    connectWebSocket,
-  };
-
   return (
-    <SimulationContext.Provider value={contextValue}>
+    <SimulationContext.Provider
+      value={{
+        isConnected,
+        simulationState,
+        handleStart,
+        handlePause,
+        handleCancel,
+        connectWebSocket,
+      }}
+    >
       {children}
     </SimulationContext.Provider>
   );
@@ -326,7 +469,7 @@ export function SimulationProvider({
 // Hook to use simulation context
 export function useSimulation() {
   const context = useContext(SimulationContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error("useSimulation must be used within a SimulationProvider");
   }
   return context;
